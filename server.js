@@ -130,6 +130,11 @@ function siteFromForward(req) {
 function siteUrl(site) {
   return SITE_URLS[site] || `https://arx-sites.duckdns.org/${site}/`;
 }
+// duckdns.org est un « public suffix » : impossible de partager un cookie entre sous-domaines.
+// Le lien d'accès pointe donc vers la porte servie sur l'hôte du site, qui y pose un cookie d'hôte.
+function gateBase(site) {
+  try { return new URL(siteUrl(site)).origin + '/gate'; } catch { return PUBLIC_URL; }
+}
 
 // ---------- cookie de session ----------
 const COOKIE = 'arxgate';
@@ -361,7 +366,7 @@ async function decide(req, res, approve) {
     const t = tok();
     await q(site, `INSERT INTO sessions (prospect_id, token, expires_at) VALUES (:id, :t, SYSTIMESTAMP + INTERVAL '90' DAY)`,
       { id: p.ID, t });
-    const link = `${PUBLIC_URL}/access?t=${t}&site=${encodeURIComponent(site)}`;
+    const link = `${gateBase(site)}/access?t=${t}&site=${encodeURIComponent(site)}`;
     const sent = await sendMail(p.EMAIL, 'Votre accès est activé — Arx Capital',
       `<p>Bonjour ${esc(p.FIRST_NAME)},</p><p>Votre accès est activé. Cliquez pour entrer :</p>
        <p><a href="${link}" style="background:#1b354d;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none">Accéder au site</a></p>
@@ -387,7 +392,7 @@ router.get('/access', async (req, res) => {
     const id = r.rows[0].PROSPECT_ID;
     await q(site, `INSERT INTO access_log (prospect_id, event, path, ip, ua) VALUES (:id,'login',:p,:ip,:ua)`,
       { id, p: cut(req.originalUrl, 512), ip: cut(clientIp(req), 64), ua: cut(req.headers['user-agent'], 512) });
-    res.set('Set-Cookie', `${COOKIE}=${encodeURIComponent(makeCookieValue(site, id, req.query.t))}; Domain=.duckdns.org; Path=/; Max-Age=7776000; HttpOnly; Secure; SameSite=Lax`);
+    res.set('Set-Cookie', `${COOKIE}=${encodeURIComponent(makeCookieValue(site, id, req.query.t))}; Path=/; Max-Age=7776000; HttpOnly; Secure; SameSite=Lax`);
     res.redirect(302, siteUrl(site));
   } catch (e) { console.error('access:', e); res.status(500).send('erreur'); }
 });
