@@ -96,11 +96,12 @@ async function geo(ip) {
     return data;
   } catch { return {}; }
 }
+const ascii = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^ -~]/g, '');
 async function ntfy(title, message, actions, priority) {
   if (!NTFY_URL) return;
   try {
-    const h = { Title: title, Priority: priority || 'default', Tags: 'bust_in_silhouette' };
-    if (actions) h.Actions = actions;
+    const h = { Title: ascii(title), Priority: priority || 'default', Tags: 'bust_in_silhouette' };
+    if (actions) h.Actions = ascii(actions);
     await fetch(`${NTFY_URL}/${NTFY_TOPIC}`, { method: 'POST', headers: h, body: message, signal: AbortSignal.timeout(6000) });
   } catch (e) { console.error('ntfy:', e.message); }
 }
@@ -313,7 +314,7 @@ router.post('/register', async (req, res) => {
     // sans SMTP : on passe directement à la validation manuelle
     await q(site, `UPDATE prospects SET status='email_verified', verified_at=SYSTIMESTAMP WHERE id=:id`, { id });
     await ntfy('Nouvelle demande d\'accès', who,
-      `http, ✅ Approuver, ${PUBLIC_URL}/approve?t=${dtoken}&site=${site}, method=POST, clear=true; http, ❌ Refuser, ${PUBLIC_URL}/reject?t=${dtoken}&site=${site}, method=POST, clear=true`,
+      `http, Approuver, ${PUBLIC_URL}/approve?t=${dtoken}&site=${site}, method=POST, clear=true; http, Refuser, ${PUBLIC_URL}/reject?t=${dtoken}&site=${site}, method=POST, clear=true`,
       'high');
     return res.type('html').send(PAGE('Demande enregistrée', `<div class="ok">⏳</div><h1>Demande enregistrée</h1>
       <p class="sub">Votre demande est en cours de validation. Vous recevrez votre lien d'accès par email très vite.</p>`));
@@ -336,7 +337,7 @@ router.get('/verify', async (req, res) => {
       await q(site, `UPDATE prospects SET status='email_verified', verified_at=SYSTIMESTAMP WHERE id=:id`, { id: p.ID });
       await ntfy('Email confirmé — à valider',
         `${p.FIRST_NAME} ${p.LAST_NAME} · ${p.COMPANY}\n${p.EMAIL} · ${p.PHONE}\nObjet : ${p.INTEREST}\nSite : ${site} · ${p.CITY || '?'}, ${p.COUNTRY || '?'} · ${p.ORG || p.ISP || '?'}`,
-        `http, ✅ Approuver, ${PUBLIC_URL}/approve?t=${p.DECISION_TOKEN}&site=${site}, method=POST, clear=true; http, ❌ Refuser, ${PUBLIC_URL}/reject?t=${p.DECISION_TOKEN}&site=${site}, method=POST, clear=true`,
+        `http, Approuver, ${PUBLIC_URL}/approve?t=${p.DECISION_TOKEN}&site=${site}, method=POST, clear=true; http, Refuser, ${PUBLIC_URL}/reject?t=${p.DECISION_TOKEN}&site=${site}, method=POST, clear=true`,
         'high');
     }
     res.type('html').send(PAGE('Email confirmé', `<div class="ok">✅</div><h1>Email confirmé</h1>
