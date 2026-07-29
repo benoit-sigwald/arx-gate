@@ -432,15 +432,24 @@ router.get('/access', async (req, res) => {
   const site = SITES[req.query.site] ? req.query.site : null;
   if (!site || !req.query.t) return res.status(400).send('lien invalide');
   try {
-    const r = await q(site, `SELECT s.prospect_id, p.status FROM sessions s JOIN prospects p ON p.id = s.prospect_id
+    const r = await q(site, `SELECT s.prospect_id, p.status, p.landing FROM sessions s JOIN prospects p ON p.id = s.prospect_id
       WHERE s.token = :t AND s.revoked = 0 AND s.expires_at > SYSTIMESTAMP`, { t: req.query.t });
     if (!r.rows.length || r.rows[0].STATUS !== 'approved')
       return res.status(403).type('html').send(PAGE('Lien invalide', '<h1>Lien invalide ou expiré</h1>'));
     const id = r.rows[0].PROSPECT_ID;
     await q(site, `INSERT INTO access_log (prospect_id, event, path, ip, ua) VALUES (:id,'login',:p,:ip,:ua)`,
       { id, p: cut(req.originalUrl, 512), ip: cut(clientIp(req), 64), ua: cut(req.headers['user-agent'], 512) });
+    // on renvoie le visiteur sur la page exacte qu'il demandait, si elle appartient bien au site
+    let dest = siteUrl(site);
+    const landing = r.rows[0].LANDING;
+    if (landing) {
+      try {
+        const l = new URL(landing), base = new URL(siteUrl(site));
+        if (l.origin === base.origin && l.pathname.startsWith(base.pathname.replace(/\/$/, ''))) dest = l.href;
+      } catch {}
+    }
     res.set('Set-Cookie', `${COOKIE}=${encodeURIComponent(makeCookieValue(site, id, req.query.t))}; Path=/; Max-Age=7776000; HttpOnly; Secure; SameSite=Lax`);
-    res.redirect(302, siteUrl(site));
+    res.redirect(302, dest);
   } catch (e) { console.error('access:', e); res.status(500).send('erreur'); }
 });
 
