@@ -355,9 +355,13 @@ async function decide(req, res, approve) {
   const site = SITES[req.query.site] ? req.query.site : null;
   if (!site || !req.query.t) return res.status(400).send('lien invalide');
   try {
-    const r = await q(site, 'SELECT id, first_name, email FROM prospects WHERE decision_token = :t', { t: req.query.t });
-    if (!r.rows.length) return res.status(404).send('inconnu');
+    const r = await q(site, 'SELECT id, first_name, email, status FROM prospects WHERE decision_token = :t', { t: req.query.t });
+    if (!r.rows.length) {
+      console.log(`[decision] jeton inconnu (site ${site}) — deja traite ou prospect supprime`);
+      return res.status(200).send('deja traite ou expire');
+    }
     const p = r.rows[0];
+    console.log(`[decision] ${approve ? 'APPROUVE' : 'REFUSE'} — ${p.EMAIL} (site ${site}, statut ${p.STATUS})`);
     if (!approve) {
       await q(site, `UPDATE prospects SET status='rejected', decided_at=SYSTIMESTAMP WHERE id=:id`, { id: p.ID });
       return res.send('refuse');
