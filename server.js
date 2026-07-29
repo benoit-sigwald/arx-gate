@@ -223,11 +223,12 @@ function formPage(site, rd, err, prefill = {}) {
 
 // ---- forwardauth ----
 router.get('/auth', async (req, res) => {
-  const site = siteFromForward(req);
+  // le site vient du middleware Traefik (?site=…) ; sinon on le déduit du chemin d'origine
+  const site = SITES[req.query.site] ? req.query.site : siteFromForward(req);
   const proto = req.headers['x-forwarded-proto'] || 'https';
   const host = req.headers['x-forwarded-host'] || '';
   const uri = req.headers['x-forwarded-uri'] || '/';
-  const rd = `${proto}://${host}${uri}`;
+  const rd = (site && uri.startsWith('/' + site)) ? `${proto}://${host}${uri}` : siteUrl(site);
   if (!site) return res.sendStatus(200); // chemin non protégé
   const c = parseCookieValue(readCookie(req, COOKIE));
   if (c && c.site === site) {
