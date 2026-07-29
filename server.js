@@ -326,7 +326,9 @@ function formPage(site, rd, err, prefill = {}, l = 'fr') {
       if (!c.checked) { e.preventDefault(); m.hidden = false; }
     });
     document.getElementById('rgpd-accept').addEventListener('click', function(){
-      c.checked = true; m.hidden = true; f.submit();
+      c.checked = true; m.hidden = false;
+      // on ne poste jamais un formulaire incomplet : le navigateur pointe le champ manquant
+      if (f.reportValidity()) { m.hidden = true; f.submit(); } else { m.hidden = true; }
     });
     document.getElementById('rgpd-cancel').addEventListener('click', function(){ m.hidden = true; c.focus(); });
     m.addEventListener('click', function(e){ if (e.target === m) m.hidden = true; });
