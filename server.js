@@ -358,7 +358,13 @@ router.get('/auth', async (req, res) => {
   const proto = req.headers['x-forwarded-proto'] || 'https';
   const host = req.headers['x-forwarded-host'] || '';
   const uri = req.headers['x-forwarded-uri'] || '/';
-  const rd = (site && uri.startsWith('/' + site)) ? `${proto}://${host}${uri}` : siteUrl(site);
+  // page exacte demandee : soit /<site>/…, soit n'importe quel chemin sur l'hote propre du site
+  let rd = siteUrl(site);
+  if (site) {
+    let sameHost = false;
+    try { sameHost = new URL(siteUrl(site)).host === host; } catch {}
+    if (uri.startsWith('/' + site) || sameHost) rd = `${proto}://${host}${uri}`;
+  }
   if (!site) return res.sendStatus(200); // chemin non protégé
   const c = parseCookieValue(readCookie(req, COOKIE));
   if (c && c.site === site) {
