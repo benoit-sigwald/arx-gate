@@ -189,10 +189,58 @@ button:hover{background:#2c4a68}
 .ok{font-size:2.4rem;margin-bottom:10px}
 a{color:var(--gold)}
 small{color:var(--muted);font-size:.76rem;display:block;margin-top:18px}
+.lang{position:absolute;top:14px;right:16px;font-size:.78rem;font-weight:600;text-decoration:none;
+ color:var(--navy);border:1px solid var(--border);border-radius:8px;padding:4px 10px;background:#fff}
+.lang:hover{border-color:var(--gold);color:var(--gold)}
+.box{position:relative}
 </style></head><body><div class="box">${body}</div></body></html>`;
 
 const BASE_ABS = (process.env.BASE_PATH && process.env.BASE_PATH !== '/') ? process.env.BASE_PATH.replace(/\/$/, '') : '';
-const INTERESTS = ['Mission de conseil', 'Recrutement', 'Partenariat', 'Investissement', 'Curiosité / veille'];
+// ---------- traductions ----------
+const T = {
+  fr: {
+    title: 'Acces', h1: 'Acces reserve',
+    sub: "Cet espace est prive. Presentez-vous en quelques secondes : vous recevrez un email de confirmation, puis votre acces sera active apres validation.",
+    first: 'Prenom', last: 'Nom', email: 'Email professionnel', phone: 'Telephone', company: 'Societe',
+    interest: 'Objet de votre visite', choose: '- choisir -', submit: "Demander l'acces",
+    consent: "J'accepte que mes donnees (nom, email, telephone, societe) soient conservees par Arx Capital pour gerer mon acces et me recontacter. Elles ne sont ni vendues ni transmises a des tiers. Droit d'acces et de suppression : benoit.p.g.sigwald@gmail.com.",
+    foot: 'Arx Capital - Mougins, France - donnees hebergees en France (Oracle Cloud, Paris)',
+    err: 'Merci de remplir tous les champs, un email valide et le consentement.',
+    errTech: 'Erreur technique, reessayez dans un instant.',
+    waitTitle: 'Demande enregistree', waitH1: 'Demande enregistree',
+    waitSub: "Votre demande est en cours de validation. Gardez cette page ouverte : elle s'ouvrira automatiquement des l'accord, en general en quelques minutes.",
+    waitPending: 'Validation en attente...', waitGranted: 'Acces accorde, ouverture...', waitRejected: 'Demande refusee.',
+    mailTitle: 'Verifiez vos emails', mailH1: 'Verifiez vos emails',
+    mailSub: 'Un lien de confirmation vient d\'etre envoye a', mailSub2: 'Cliquez dessus pour poursuivre.',
+    okTitle: 'Email confirme', okH1: 'Email confirme',
+    okSub: 'Votre acces est en cours de validation ; vous recevrez le lien des qu\'il est active.',
+    badTitle: 'Lien invalide', badH1: 'Lien invalide ou expire',
+    interests: ['Mission de conseil', 'Recrutement', 'Partenariat', 'Investissement', 'Curiosite / veille'],
+    other: 'English',
+  },
+  en: {
+    title: 'Access', h1: 'Private access',
+    sub: 'This area is private. Introduce yourself in a few seconds: you will get a confirmation email, then your access is activated after approval.',
+    first: 'First name', last: 'Last name', email: 'Work email', phone: 'Phone', company: 'Company',
+    interest: 'Purpose of your visit', choose: '- select -', submit: 'Request access',
+    consent: 'I agree that my data (name, email, phone, company) is kept by Arx Capital to manage my access and to contact me. It is never sold or shared with third parties. Access and deletion rights: benoit.p.g.sigwald@gmail.com.',
+    foot: 'Arx Capital - Mougins, France - data hosted in France (Oracle Cloud, Paris)',
+    err: 'Please fill in every field, a valid email and the consent box.',
+    errTech: 'Technical error, please try again in a moment.',
+    waitTitle: 'Request received', waitH1: 'Request received',
+    waitSub: 'Your request is being reviewed. Keep this page open: it will open automatically once approved, usually within minutes.',
+    waitPending: 'Waiting for approval...', waitGranted: 'Access granted, opening...', waitRejected: 'Request declined.',
+    mailTitle: 'Check your inbox', mailH1: 'Check your inbox',
+    mailSub: 'A confirmation link has just been sent to', mailSub2: 'Click it to continue.',
+    okTitle: 'Email confirmed', okH1: 'Email confirmed',
+    okSub: 'Your access is being reviewed; you will get the link as soon as it is activated.',
+    badTitle: 'Invalid link', badH1: 'Invalid or expired link',
+    interests: ['Consulting engagement', 'Recruitment', 'Partnership', 'Investment', 'Curiosity / research'],
+    other: 'Francais',
+  },
+};
+const lang = req => (String(req.query.lang || '').toLowerCase() === 'en'
+  || (!req.query.lang && /^en/i.test(String(req.headers['accept-language'] || '')))) ? 'en' : 'fr';
 
 function waitingPage(site, vtoken) {
   return PAGE('Demande enregistrée', `<div class="ok">⏳</div><h1>Demande enregistrée</h1>
@@ -217,38 +265,64 @@ function waitingPage(site, vtoken) {
   </script>`);
 }
 
-function formPage(site, rd, err, prefill = {}) {
-  const opts = INTERESTS.map(i => `<option${prefill.interest === i ? ' selected' : ''}>${esc(i)}</option>`).join('');
-  return PAGE('Accès', `
-  <h1>Accès réservé</h1>
-  <p class="sub">Cet espace est privé. Présentez-vous en quelques secondes : vous recevrez un email de
-  confirmation, puis votre accès sera activé après validation.</p>
+function langLink(l, extra = '') {
+  return `<a class="lang" href="?lang=${l === 'fr' ? 'en' : 'fr'}${extra}">${T[l].other}</a>`;
+}
+
+function formPage(site, rd, err, prefill = {}, l = 'fr') {
+  const t = T[l];
+  const opts = t.interests.map(i => `<option${prefill.interest === i ? ' selected' : ''}>${esc(i)}</option>`).join('');
+  const extra = `&site=${encodeURIComponent(site)}${rd ? '&rd=' + encodeURIComponent(rd) : ''}`;
+  return PAGE(t.title, `
+  ${langLink(l, extra)}
+  <h1>${esc(t.h1)}</h1>
+  <p class="sub">${esc(t.sub)}</p>
   ${err ? `<div class="err">${esc(err)}</div>` : ''}
   <form method="post" action="${BASE_ABS}/register">
     <input type="hidden" name="site" value="${esc(site)}"><input type="hidden" name="rd" value="${esc(rd || '')}">
+    <input type="hidden" name="lang" value="${l}">
     <div class="row">
-      <div><label>Prénom *</label><input name="first_name" required maxlength="80" value="${esc(prefill.first_name || '')}"></div>
-      <div><label>Nom *</label><input name="last_name" required maxlength="80" value="${esc(prefill.last_name || '')}"></div>
+      <div><label>${esc(t.first)} *</label><input name="first_name" required maxlength="80" value="${esc(prefill.first_name || '')}"></div>
+      <div><label>${esc(t.last)} *</label><input name="last_name" required maxlength="80" value="${esc(prefill.last_name || '')}"></div>
     </div>
-    <label>Email professionnel *</label>
+    <label>${esc(t.email)} *</label>
     <input type="email" name="email" required maxlength="160" value="${esc(prefill.email || '')}">
     <div class="row">
-      <div><label>Téléphone *</label><input type="tel" name="phone" required maxlength="40" placeholder="+33 6 12 34 56 78" value="${esc(prefill.phone || '')}"></div>
-      <div><label>Société *</label><input name="company" required maxlength="160" value="${esc(prefill.company || '')}"></div>
+      <div><label>${esc(t.phone)} *</label><input type="tel" name="phone" required maxlength="40" placeholder="+33 6 12 34 56 78" value="${esc(prefill.phone || '')}"></div>
+      <div><label>${esc(t.company)} *</label><input name="company" required maxlength="160" value="${esc(prefill.company || '')}"></div>
     </div>
-    <label>Objet de votre visite *</label>
-    <select name="interest" required><option value="">— choisir —</option>${opts}</select>
+    <label>${esc(t.interest)} *</label>
+    <select name="interest" required><option value="">${esc(t.choose)}</option>${opts}</select>
     <div class="consent">
       <input type="checkbox" name="consent" id="c" required>
-      <label for="c" style="font-weight:400;margin:0;font-size:.82rem;color:var(--muted)">
-        J'accepte que mes données (nom, email, téléphone, société) soient conservées par Arx Capital
-        pour gérer mon accès et me recontacter. Elles ne sont ni vendues ni transmises à des tiers.
-        Droit d'accès et de suppression : benoit.p.g.sigwald@gmail.com.
-      </label>
+      <label for="c" style="font-weight:400;margin:0;font-size:.82rem;color:var(--muted)">${esc(t.consent)}</label>
     </div>
-    <button type="submit">Demander l'accès</button>
+    <button type="submit">${esc(t.submit)}</button>
   </form>
-  <small>Arx Capital · Mougins, France · données hébergées en France (Oracle Cloud, Paris)</small>`);
+  <small>${esc(t.foot)}</small>`);
+}
+
+function waitingPage(site, vtoken, l = 'fr') {
+  const t = T[l];
+  return PAGE(t.waitTitle, `<div class="ok">&#9203;</div><h1>${esc(t.waitH1)}</h1>
+  <p class="sub">${esc(t.waitSub)}</p>
+  <p class="sub" id="st" style="color:var(--gold)">${esc(t.waitPending)}</p>
+  <script>
+  (function(){
+    var n = 0;
+    function check(){
+      fetch('${BASE_ABS}/status?site=${encodeURIComponent(site)}&t=${vtoken}')
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          if (j.link) { document.getElementById('st').textContent = ${JSON.stringify(t.waitGranted)}; location.href = j.link; return; }
+          if (j.status === 'rejected') { document.getElementById('st').textContent = ${JSON.stringify(t.waitRejected)}; return; }
+          if (++n < 240) setTimeout(check, 5000);
+        })
+        .catch(function(){ if (++n < 240) setTimeout(check, 8000); });
+    }
+    setTimeout(check, 4000);
+  })();
+  </script>`);
 }
 
 // ---- forwardauth ----
@@ -277,7 +351,7 @@ router.get('/auth', async (req, res) => {
 // ---- formulaire ----
 router.get('/', (req, res) => {
   const site = SITES[req.query.site] ? req.query.site : Object.keys(SITES)[0];
-  res.type('html').send(formPage(site, req.query.rd));
+  res.type('html').send(formPage(site, req.query.rd, null, {}, lang(req)));
 });
 
 // ---- inscription ----
@@ -285,11 +359,12 @@ router.post('/register', form, async (req, res) => {
   const b = req.body || {};
   const site = SITES[b.site] ? b.site : null;
   if (!site) return res.status(400).send('site inconnu');
+  const l = (String(b.lang || '').toLowerCase() === 'en') ? 'en' : 'fr';
   const email = String(b.email || '').trim().toLowerCase();
   const need = ['first_name', 'last_name', 'phone', 'company', 'interest'];
   const missing = need.some(k => !String(b[k] || '').trim());
   if (missing || !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email) || !b.consent) {
-    return res.type('html').send(formPage(site, b.rd, 'Merci de remplir tous les champs, un email valide et le consentement.', b));
+    return res.type('html').send(formPage(site, b.rd, T[l].err, b, l));
   }
   try {
     const ip = clientIp(req), ua = req.headers['user-agent'] || '';
@@ -341,18 +416,18 @@ router.post('/register', form, async (req, res) => {
          <p><a href="${link}" style="background:#1b354d;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none">Confirmer mon email</a></p>
          <p style="color:#666;font-size:13px">Votre accès sera activé après validation manuelle. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.</p>`);
       await ntfy('Nouvelle demande (email à confirmer)', who);
-      return res.type('html').send(PAGE('Vérifiez vos emails', `<div class="ok">📩</div><h1>Vérifiez vos emails</h1>
-        <p class="sub">Un lien de confirmation vient d'être envoyé à <b>${esc(email)}</b>. Cliquez dessus pour poursuivre.</p>`));
+      return res.type('html').send(PAGE(T[l].mailTitle, `<div class="ok">&#128233;</div><h1>${esc(T[l].mailH1)}</h1>
+        <p class="sub">${esc(T[l].mailSub)} <b>${esc(email)}</b>. ${esc(T[l].mailSub2)}</p>`));
     }
     // sans SMTP : on passe directement à la validation manuelle
     await q(site, `UPDATE prospects SET status='email_verified', verified_at=SYSTIMESTAMP WHERE id=:id`, { id });
     await ntfy('Nouvelle demande d\'accès', who,
       `http, Approuver, ${PUBLIC_URL}/approve?t=${dtoken}&site=${site}, method=POST, clear=true; http, Refuser, ${PUBLIC_URL}/reject?t=${dtoken}&site=${site}, method=POST, clear=true`,
       'high');
-    return res.type('html').send(waitingPage(site, vtoken));
+    return res.type('html').send(waitingPage(site, vtoken, l));
   } catch (e) {
     console.error('register:', e);
-    res.status(500).type('html').send(formPage(site, b.rd, 'Erreur technique, réessayez dans un instant.', b));
+    res.status(500).type('html').send(formPage(site, b.rd, T[l].errTech, b, l));
   }
 });
 
@@ -363,7 +438,8 @@ router.get('/verify', async (req, res) => {
   try {
     const r = await q(site, `SELECT id, first_name, last_name, email, phone, company, interest, city, country, org, isp, decision_token, status
       FROM prospects WHERE verify_token = :t`, { t: req.query.t });
-    if (!r.rows.length) return res.status(400).type('html').send(PAGE('Lien invalide', '<h1>Lien invalide ou expiré</h1>'));
+    const lv = lang(req);
+    if (!r.rows.length) return res.status(400).type('html').send(PAGE(T[lv].badTitle, `<h1>${esc(T[lv].badH1)}</h1>`));
     const p = r.rows[0];
     if (p.STATUS === 'pending') {
       await q(site, `UPDATE prospects SET status='email_verified', verified_at=SYSTIMESTAMP WHERE id=:id`, { id: p.ID });
@@ -372,8 +448,8 @@ router.get('/verify', async (req, res) => {
         `http, Approuver, ${PUBLIC_URL}/approve?t=${p.DECISION_TOKEN}&site=${site}, method=POST, clear=true; http, Refuser, ${PUBLIC_URL}/reject?t=${p.DECISION_TOKEN}&site=${site}, method=POST, clear=true`,
         'high');
     }
-    res.type('html').send(PAGE('Email confirmé', `<div class="ok">✅</div><h1>Email confirmé</h1>
-      <p class="sub">Merci ${esc(p.FIRST_NAME)}. Votre accès est en cours de validation ; vous recevrez le lien par email dès qu'il est activé.</p>`));
+    res.type('html').send(PAGE(T[lv].okTitle, `<div class="ok">&#9989;</div><h1>${esc(T[lv].okH1)}</h1>
+      <p class="sub">${esc(p.FIRST_NAME)} - ${esc(T[lv].okSub)}</p>`));
   } catch (e) { console.error('verify:', e); res.status(500).send('erreur'); }
 });
 
@@ -439,7 +515,7 @@ router.get('/access', async (req, res) => {
     const r = await q(site, `SELECT s.prospect_id, p.status, p.landing FROM sessions s JOIN prospects p ON p.id = s.prospect_id
       WHERE s.token = :t AND s.revoked = 0 AND s.expires_at > SYSTIMESTAMP`, { t: req.query.t });
     if (!r.rows.length || r.rows[0].STATUS !== 'approved')
-      return res.status(403).type('html').send(PAGE('Lien invalide', '<h1>Lien invalide ou expiré</h1>'));
+      return res.status(403).type('html').send(PAGE(T[lang(req)].badTitle, `<h1>${esc(T[lang(req)].badH1)}</h1>`));
     const id = r.rows[0].PROSPECT_ID;
     await q(site, `INSERT INTO access_log (prospect_id, event, path, ip, ua) VALUES (:id,'login',:p,:ip,:ua)`,
       { id, p: cut(req.originalUrl, 512), ip: cut(clientIp(req), 64), ua: cut(req.headers['user-agent'], 512) });
