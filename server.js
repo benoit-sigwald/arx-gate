@@ -199,23 +199,23 @@ const BASE_ABS = (process.env.BASE_PATH && process.env.BASE_PATH !== '/') ? proc
 // ---------- traductions ----------
 const T = {
   fr: {
-    title: 'Acces', h1: 'Acces reserve',
-    sub: "Cet espace est prive. Presentez-vous en quelques secondes : vous recevrez un email de confirmation, puis votre acces sera active apres validation.",
-    first: 'Prenom', last: 'Nom', email: 'Email professionnel', phone: 'Telephone', company: 'Societe',
-    interest: 'Objet de votre visite', choose: '- choisir -', submit: "Demander l'acces",
-    consent: "J'accepte que mes donnees (nom, email, telephone, societe) soient conservees par Arx Capital pour gerer mon acces et me recontacter. Elles ne sont ni vendues ni transmises a des tiers. Droit d'acces et de suppression : benoit.p.g.sigwald@gmail.com.",
-    foot: 'Arx Capital - Mougins, France - donnees hebergees en France (Oracle Cloud, Paris)',
+    title: 'Accès', h1: 'Accès réservé',
+    sub: "Cet espace est privé. Présentez-vous en quelques secondes : vous recevrez un email de confirmation, puis votre accès sera activé après validation.",
+    first: 'Prénom', last: 'Nom', email: 'Email professionnel', phone: 'Téléphone', company: 'Société',
+    interest: 'Objet de votre visite', choose: '— choisir —', submit: "Demander l'accès",
+    consent: "J'accepte que mes données (nom, email, téléphone, société) soient conservées par Arx Capital pour gérer mon accès et me recontacter. Elles ne sont ni vendues ni transmises à des tiers. Droit d'accès et de suppression : benoit.p.g.sigwald@gmail.com.",
+    foot: 'Arx Capital · Mougins, France · données hébergées en France (Oracle Cloud, Paris)',
     err: 'Merci de remplir tous les champs, un email valide et le consentement.',
-    errTech: 'Erreur technique, reessayez dans un instant.',
-    waitTitle: 'Demande enregistree', waitH1: 'Demande enregistree',
-    waitSub: "Votre demande est en cours de validation. Gardez cette page ouverte : elle s'ouvrira automatiquement des l'accord, en general en quelques minutes.",
-    waitPending: 'Validation en attente...', waitGranted: 'Acces accorde, ouverture...', waitRejected: 'Demande refusee.',
-    mailTitle: 'Verifiez vos emails', mailH1: 'Verifiez vos emails',
-    mailSub: 'Un lien de confirmation vient d\'etre envoye a', mailSub2: 'Cliquez dessus pour poursuivre.',
-    okTitle: 'Email confirme', okH1: 'Email confirme',
-    okSub: 'Votre acces est en cours de validation ; vous recevrez le lien des qu\'il est active.',
-    badTitle: 'Lien invalide', badH1: 'Lien invalide ou expire',
-    interests: ['Mission de conseil', 'Recrutement', 'Partenariat', 'Investissement', 'Curiosite / veille'],
+    errTech: 'Erreur technique, réessayez dans un instant.',
+    waitTitle: 'Demande enregistrée', waitH1: 'Demande enregistrée',
+    waitSub: "Votre demande est en cours de validation. Gardez cette page ouverte : elle s'ouvrira automatiquement dès l'accord, en général en quelques minutes.",
+    waitPending: 'Validation en attente…', waitGranted: 'Accès accordé, ouverture…', waitRejected: 'Demande refusée.',
+    mailTitle: 'Vérifiez vos emails', mailH1: 'Vérifiez vos emails',
+    mailSub: 'Un lien de confirmation vient d\'être envoyé à', mailSub2: 'Cliquez dessus pour poursuivre.',
+    okTitle: 'Email confirmé', okH1: 'Email confirmé',
+    okSub: 'votre accès est en cours de validation ; vous recevrez le lien dès qu\'il est activé.',
+    badTitle: 'Lien invalide', badH1: 'Lien invalide ou expiré',
+    interests: ['Mission de conseil', 'Recrutement', 'Partenariat', 'Investissement', 'Curiosité / veille'],
     other: 'English',
   },
   en: {
@@ -384,15 +384,20 @@ router.post('/register', form, async (req, res) => {
         return res.redirect(302, `${gateBase(site)}/access?t=${t2}&site=${encodeURIComponent(site)}`);
       }
       await q(site, `UPDATE prospects SET first_name=:f, last_name=:l, phone=:p, company=:c, interest=:i,
-        verify_token=:v, decision_token=:d, status='pending' WHERE id=:id`,
+        verify_token=:v, decision_token=:d, status='pending',
+        signup_ip=:ip, country=:country, region=:region, city=:city, org=:org, isp=:isp, asn=:asn,
+        lat=:lat, lon=:lon, browser=:browser, os=:os, device=:device WHERE id=:id`,
         { f: cut(b.first_name, 80), l: cut(b.last_name, 80), p: cut(b.phone, 40), c: cut(b.company, 160),
-          i: cut(b.interest, 60), v: vtoken, d: dtoken, id });
+          i: cut(b.interest, 60), v: vtoken, d: dtoken,
+          ip: cut(ip, 64), country: cut(g.country, 64), region: cut(g.region, 64), city: cut(g.city, 64),
+          org: cut(g.org, 160), isp: cut(g.isp, 160), asn: cut(g.asn, 64),
+          lat: g.lat ?? null, lon: g.lon ?? null, browser, os, device, id });
     } else {
       const r = await q(site, `INSERT INTO prospects
         (first_name,last_name,email,phone,company,interest,status,consent_rgpd,consent_at,verify_token,decision_token,
-         site,signup_ip,country,region,city,org,isp,asn,browser,os,device,lang,referrer,landing,utm_source,utm_medium,utm_campaign)
+         site,signup_ip,country,region,city,org,isp,asn,browser,os,device,lang,referrer,landing,utm_source,utm_medium,utm_campaign,lat,lon)
         VALUES (:f,:l,:e,:p,:c,:i,'pending',1,SYSTIMESTAMP,:v,:d,:site,:ip,:country,:region,:city,:org,:isp,:asn,
-                :browser,:os,:device,:lang,:ref,:landing,:us,:um,:uc)
+                :browser,:os,:device,:lang,:ref,:landing,:us,:um,:uc,:lat,:lon)
         RETURNING id INTO :id`,
         { f: cut(b.first_name, 80), l: cut(b.last_name, 80), e: cut(email, 160), p: cut(b.phone, 40),
           c: cut(b.company, 160), i: cut(b.interest, 60), v: vtoken, d: dtoken, site,
@@ -401,6 +406,7 @@ router.post('/register', form, async (req, res) => {
           browser, os, device, lang: cut((req.headers['accept-language'] || '').split(',')[0], 32),
           ref: cut(req.headers.referer, 512), landing: cut(b.rd, 512),
           us: cut(b.utm_source, 80), um: cut(b.utm_medium, 80), uc: cut(b.utm_campaign, 80),
+          lat: g.lat ?? null, lon: g.lon ?? null,
           id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
       id = r.outBinds.id[0];
     }
@@ -609,7 +615,8 @@ router.get('/admin', async (req, res) => {
       <td>${esc(p.CITY || '')} ${esc(p.COUNTRY || '')}<br><span class="m">${esc(p.ORG || p.ISP || '')}</span></td>
       <td><span style="color:${badge(p.STATUS)};font-weight:600">${esc(p.STATUS)}</span></td>
       <td><b>${p.NB || 0}</b> visite(s)<br><span class="m">${p.NB ? 'derniere ' + fmt(p.LAST_SEEN) : '-'}</span></td>
-      <td class="m">${esc(p.LAST_PAGE || '-')}<br><span class="m">${esc(p.BROWSER || '')} ${esc(p.DEVICE || '')}</span></td></tr>`).join('');
+      <td class="m">${esc(p.LAST_PAGE || '-')}<br><span class="m">${esc(p.BROWSER || '')} ${esc(p.DEVICE || '')}</span></td>
+      <td onclick="event.stopPropagation()">${p.LAT != null ? `<a href="https://maps.google.com/?q=${p.LAT},${p.LON}" target="_blank" rel="noopener" title="${esc(p.LAT + ', ' + p.LON)}">carte</a>` : '-'}</td></tr>`).join('');
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Prospects — ${esc(site)}</title><style>
@@ -632,8 +639,8 @@ td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
   <div class="tile"><b>${s.PENDING || 0}</b><span>email non confirmé</span></div>
   <div class="tile"><b>${last.rows[0].C}</b><span>visites 7 jours</span></div>
 </div>
-<table><thead><tr><th>Inscrit</th><th>Personne</th><th>Contact</th><th>Objet</th><th>Lieu / organisation</th><th>Statut</th><th>Visites</th><th>Derniere page</th></tr></thead>
-<tbody>${rows || '<tr><td colspan="8">Aucun prospect pour ce site.</td></tr>'}</tbody></table>
+<table><thead><tr><th>Inscrit</th><th>Personne</th><th>Contact</th><th>Objet</th><th>Lieu / organisation</th><th>Statut</th><th>Visites</th><th>Derniere page</th><th>Geo</th></tr></thead>
+<tbody>${rows || '<tr><td colspan="9">Aucun prospect pour ce site.</td></tr>'}</tbody></table>
 <p class="m" style="margin-top:10px">Cliquez une ligne pour voir tout le parcours de visite du prospect.</p>
 </div></body></html>`);
   } catch (e) { console.error('admin:', e); res.status(500).send('erreur: ' + esc(e.message)); }
@@ -657,7 +664,7 @@ router.get('/prospect', async (req, res) => {
     const fmt = t => t ? new Date(t).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
     const first = vis.rows.length ? vis.rows[vis.rows.length - 1].TS : null;
     const last = vis.rows.length ? vis.rows[0].TS : null;
-    const ll = vis.rows.find(v => v.LAT != null);
+    const ll = (p.LAT != null && p.LON != null) ? { LAT: p.LAT, LON: p.LON } : vis.rows.find(v => v.LAT != null);
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)} - prospect</title><style>
@@ -697,6 +704,7 @@ iframe{width:100%;height:280px;border:0;border-radius:10px}
   <div><span>Ville / pays</span><b>${esc(p.CITY || '-')}, ${esc(p.COUNTRY || '-')}</b></div>
   <div><span>Organisation / FAI</span><b>${esc(p.ORG || p.ISP || '-')}</b></div>
   <div><span>Reseau (ASN)</span><b>${esc(p.ASN || '-')}</b></div>
+  <div><span>Coordonnees GPS</span><b>${p.LAT != null ? p.LAT + ', ' + p.LON : (ll ? ll.LAT + ', ' + ll.LON : '-')}</b></div>
   <div><span>IP d'inscription</span><b>${esc(p.SIGNUP_IP || '-')}</b></div>
   <div><span>Appareil</span><b>${esc(p.BROWSER || '')} &middot; ${esc(p.OS || '')} &middot; ${esc(p.DEVICE || '')}</b></div>
   <div><span>Langue</span><b>${esc(p.LANG || '-')}</b></div>
@@ -737,7 +745,7 @@ router.get('/export.csv', async (req, res) => {
     FROM prospects p ORDER BY p.created_at DESC`);
   const cols = ['CREATED_AT', 'FIRST_NAME', 'LAST_NAME', 'EMAIL', 'PHONE', 'COMPANY', 'INTEREST', 'STATUS',
     'CITY', 'COUNTRY', 'ORG', 'ISP', 'ASN', 'BROWSER', 'OS', 'DEVICE', 'LANG', 'REFERRER', 'LANDING',
-    'UTM_SOURCE', 'UTM_MEDIUM', 'UTM_CAMPAIGN', 'SIGNUP_IP', 'NB_VISITES', 'PREMIERE_VISITE', 'DERNIERE_VISITE', 'SITE'];
+    'UTM_SOURCE', 'UTM_MEDIUM', 'UTM_CAMPAIGN', 'SIGNUP_IP', 'LAT', 'LON', 'NB_VISITES', 'PREMIERE_VISITE', 'DERNIERE_VISITE', 'SITE'];
   const csv = [cols.join(';')].concat(r.rows.map(x => cols.map(c => `"${String(x[c] ?? '').replace(/"/g, '""')}"`).join(';'))).join('\n');
   res.type('text/csv').set('Content-Disposition', `attachment; filename="prospects-${site}.csv"`).send(csv);
 });
