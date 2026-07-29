@@ -358,12 +358,14 @@ router.get('/auth', async (req, res) => {
   const proto = req.headers['x-forwarded-proto'] || 'https';
   const host = req.headers['x-forwarded-host'] || '';
   const uri = req.headers['x-forwarded-uri'] || '/';
-  // page exacte demandee : soit /<site>/…, soit n'importe quel chemin sur l'hote propre du site
+  // page exacte demandee : /<site>/… sur un hote partage, ou n'importe quel chemin sur l'hote dedie
   let rd = siteUrl(site);
-  if (site) {
-    let sameHost = false;
-    try { sameHost = new URL(siteUrl(site)).host === host; } catch {}
-    if (uri.startsWith('/' + site) || sameHost) rd = `${proto}://${host}${uri}`;
+  if (site && uri && !uri.startsWith('/gate')) {
+    if (uri.startsWith('/' + site)) {
+      rd = `${proto}://${host}${uri}`;
+    } else {
+      try { rd = new URL(siteUrl(site)).origin + uri; } catch {}
+    }
   }
   if (!site) return res.sendStatus(200); // chemin non protégé
   const c = parseCookieValue(readCookie(req, COOKIE));
