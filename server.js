@@ -298,7 +298,7 @@ function formPage(site, rd, err, prefill = {}, l = 'fr') {
     <label>${esc(t.interest)} *</label>
     <select name="interest" required><option value="">${esc(t.choose)}</option>${opts}</select>
     <div class="consent">
-      <input type="checkbox" name="consent" id="c" required>
+      <input type="checkbox" name="consent" id="c">
       <label for="c" style="font-weight:400;margin:0;font-size:.82rem;color:var(--muted)">${esc(t.consent)}</label>
     </div>
     <button type="submit">${esc(t.submit)}</button>
@@ -317,7 +317,6 @@ function formPage(site, rd, err, prefill = {}, l = 'fr') {
   (function(){
     var f = document.querySelector('form'), c = document.getElementById('c'),
         m = document.getElementById('rgpd-modal');
-    c.addEventListener('invalid', function(e){ e.preventDefault(); });
     f.addEventListener('submit', function(e){
       if (!c.checked) { e.preventDefault(); m.hidden = false; }
     });
