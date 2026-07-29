@@ -667,7 +667,7 @@ th{text-align:left;padding:10px 12px;background:#f2f5f9;color:#1b354d;font-size:
 td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
 .m{color:#5b6472;font-size:.78rem}a{color:#ae8d57}
 </style></head><body><div class="w">
-<h1>Prospects</h1><p class="m"><a href="${BASE_ABS}/visits?site=${site}"><b>Voir les visites (tracker) &rarr;</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
+<h1>Prospects</h1><p class="m"><a href="${BASE_ABS}/prospect/new?site=${site}"><b>+ Ajouter un prospect</b></a> &middot; <a href="${BASE_ABS}/visits?site=${site}"><b>Voir les visites (tracker) &rarr;</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
 <div style="margin:14px 0">${tabs}</div>
 <div class="tiles">
   <div class="tile"><b>${s.TOTAL || 0}</b><span>prospects</span></div>
@@ -681,6 +681,130 @@ td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
 <p class="m" style="margin-top:10px">Cliquez une ligne pour voir tout le parcours de visite du prospect.</p>
 </div></body></html>`);
   } catch (e) { console.error('admin:', e); res.status(500).send('erreur: ' + esc(e.message)); }
+});
+
+// ---- modification / suppression d'un prospect ----
+function adminBack(res, site, id, msg) {
+  res.redirect(302, `${BASE_ABS}/prospect?site=${encodeURIComponent(site)}&id=${id}&ok=${encodeURIComponent(msg)}`);
+}
+
+router.post('/prospect/save', form, async (req, res) => {
+  if (!authed(req, res)) return;
+  const site = SITES[req.body.site] ? req.body.site : null;
+  const id = Number(req.body.id);
+  if (!site || !id) return res.status(400).send('parametres manquants');
+  try {
+    await q(site, `UPDATE prospects SET first_name=:f, last_name=:l, email=:e, phone=:p, company=:c,
+      interest=:i, status=:st, notes=:n WHERE id=:id`, {
+      f: cut(req.body.first_name, 80), l: cut(req.body.last_name, 80),
+      e: cut(String(req.body.email || '').trim().toLowerCase(), 160), p: cut(req.body.phone, 40),
+      c: cut(req.body.company, 160), i: cut(req.body.interest, 60),
+      st: cut(req.body.status, 20) || 'pending', n: cut(req.body.notes, 500), id });
+    console.log(`[admin] prospect ${id} (${site}) modifie`);
+    adminBack(res, site, id, 'Fiche enregistree');
+  } catch (e) { console.error('save:', e.message); res.status(500).send('erreur: ' + esc(e.message)); }
+});
+
+router.post('/prospect/access', form, async (req, res) => {
+  if (!authed(req, res)) return;
+  const site = SITES[req.body.site] ? req.body.site : null;
+  const id = Number(req.body.id);
+  if (!site || !id) return res.status(400).send('parametres manquants');
+  try {
+    const r = await q(site, 'SELECT email, first_name FROM prospects WHERE id = :id', { id });
+    if (!r.rows.length) return res.status(404).send('inconnu');
+    await q(site, `UPDATE prospects SET status='approved', decided_at=SYSTIMESTAMP WHERE id=:id`, { id });
+    const t = tok();
+    await q(site, `INSERT INTO sessions (prospect_id, token, expires_at) VALUES (:id, :t, SYSTIMESTAMP + INTERVAL '90' DAY)`, { id, t });
+    const link = `${gateBase(site)}/access?t=${t}&site=${encodeURIComponent(site)}`;
+    const sent = await sendMail(r.rows[0].EMAIL, 'Votre acces — Arx Capital',
+      `<p>Bonjour ${esc(r.rows[0].FIRST_NAME || '')},</p><p>Voici votre lien d'acces :</p>
+       <p><a href="${link}">${link}</a></p>`);
+    if (!sent) await ntfy('Lien d acces genere', `${r.rows[0].EMAIL}\n${link}`);
+    console.log(`[admin] nouveau lien d'acces pour prospect ${id} (${site})`);
+    adminBack(res, site, id, sent ? 'Lien envoye par email' : 'Lien envoye sur ntfy');
+  } catch (e) { console.error('access-admin:', e.message); res.status(500).send('erreur: ' + esc(e.message)); }
+});
+
+router.post('/prospect/revoke', form, async (req, res) => {
+  if (!authed(req, res)) return;
+  const site = SITES[req.body.site] ? req.body.site : null;
+  const id = Number(req.body.id);
+  if (!site || !id) return res.status(400).send('parametres manquants');
+  try {
+    await q(site, 'UPDATE sessions SET revoked = 1 WHERE prospect_id = :id', { id });
+    await q(site, `UPDATE prospects SET status='rejected', decided_at=SYSTIMESTAMP WHERE id=:id`, { id });
+    console.log(`[admin] acces revoques pour prospect ${id} (${site})`);
+    adminBack(res, site, id, 'Acces revoques');
+  } catch (e) { console.error('revoke:', e.message); res.status(500).send('erreur: ' + esc(e.message)); }
+});
+
+router.post('/prospect/delete', form, async (req, res) => {
+  if (!authed(req, res)) return;
+  const site = SITES[req.body.site] ? req.body.site : null;
+  const id = Number(req.body.id);
+  if (!site || !id) return res.status(400).send('parametres manquants');
+  try {
+    await q(site, 'UPDATE visits SET prospect_id = NULL WHERE prospect_id = :id', { id });
+    await q(site, 'DELETE FROM sessions WHERE prospect_id = :id', { id });
+    await q(site, 'DELETE FROM access_log WHERE prospect_id = :id', { id });
+    await q(site, 'DELETE FROM prospects WHERE id = :id', { id });
+    console.log(`[admin] prospect ${id} (${site}) supprime`);
+    res.redirect(302, `${BASE_ABS}/admin?site=${encodeURIComponent(site)}`);
+  } catch (e) { console.error('delete:', e.message); res.status(500).send('erreur: ' + esc(e.message)); }
+});
+
+// ---- ajout manuel d'un prospect ----
+router.get('/prospect/new', (req, res) => {
+  if (!authed(req, res)) return;
+  const site = SITES[req.query.site] ? req.query.site : Object.keys(SITES)[0];
+  res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Nouveau prospect</title><style>
+body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
+.w{max-width:640px;margin:0 auto}h1{font-size:1.3rem;color:#1b354d;margin:0 0 14px}
+.card{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:22px}
+label{display:block;font-size:.78rem;font-weight:600;color:#1b354d;margin:12px 0 4px}
+input,select{width:100%;padding:10px 12px;border:1px solid #e4e8ef;border-radius:8px;font:inherit;font-size:.92rem}
+input:focus,select:focus{outline:none;border-color:#ae8d57}
+button{margin-top:18px;padding:11px 20px;border:none;border-radius:9px;background:#1b354d;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+a{color:#ae8d57}
+</style></head><body><div class="w">
+<p><a href="${BASE_ABS}/admin?site=${site}">&larr; retour aux prospects</a></p>
+<h1>Ajouter un prospect (${esc(site)})</h1>
+<form class="card" method="post" action="${BASE_ABS}/prospect/create">
+  <input type="hidden" name="site" value="${esc(site)}">
+  <label>Prenom</label><input name="first_name" required maxlength="80">
+  <label>Nom</label><input name="last_name" required maxlength="80">
+  <label>Email</label><input name="email" type="email" required maxlength="160">
+  <label>Telephone</label><input name="phone" maxlength="40">
+  <label>Societe</label><input name="company" maxlength="160">
+  <label>Objet</label><input name="interest" maxlength="60">
+  <label>Statut</label><select name="status">
+    <option>approved</option><option>email_verified</option><option selected>pending</option><option>rejected</option>
+  </select>
+  <label>Notes</label><input name="notes" maxlength="500">
+  <button type="submit">Creer</button>
+</form>
+</div></body></html>`);
+});
+
+router.post('/prospect/create', form, async (req, res) => {
+  if (!authed(req, res)) return;
+  const site = SITES[req.body.site] ? req.body.site : null;
+  if (!site) return res.status(400).send('site inconnu');
+  try {
+    const r = await q(site, `INSERT INTO prospects (first_name,last_name,email,phone,company,interest,status,
+      consent_rgpd,site,notes,verify_token,decision_token)
+      VALUES (:f,:l,:e,:p,:c,:i,:st,0,:site,:n,:v,:d) RETURNING id INTO :id`, {
+      f: cut(req.body.first_name, 80), l: cut(req.body.last_name, 80),
+      e: cut(String(req.body.email || '').trim().toLowerCase(), 160), p: cut(req.body.phone, 40),
+      c: cut(req.body.company, 160), i: cut(req.body.interest, 60),
+      st: cut(req.body.status, 20) || 'pending', site, n: cut(req.body.notes, 500),
+      v: tok(), d: tok(), id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } });
+    console.log(`[admin] prospect cree manuellement (${site})`);
+    adminBack(res, site, r.outBinds.id[0], 'Prospect cree');
+  } catch (e) { console.error('create:', e.message); res.status(500).send('erreur: ' + esc(e.message)); }
 });
 
 router.get('/visits', async (req, res) => {
@@ -804,10 +928,43 @@ th{text-align:left;padding:9px 12px;background:#f2f5f9;color:#1b354d;font-size:.
 td{padding:9px 12px;border-top:1px solid #e4e8ef}
 .m{color:#5b6472;font-size:.8rem}a{color:#ae8d57}
 iframe{width:100%;height:280px;border:0;border-radius:10px}
+.kv input,.kv select{width:100%;padding:8px 10px;border:1px solid #e4e8ef;border-radius:8px;font:inherit;font-size:.9rem;margin-top:2px}
+.kv input:focus,.kv select:focus{outline:none;border-color:#ae8d57}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.actions button{padding:10px 18px;border:none;border-radius:9px;background:#1b354d;color:#fff;font:inherit;font-weight:600;font-size:.88rem;cursor:pointer}
+.actions button:hover{background:#2c4a68}
+.actions button.alt{background:#fff;color:#1b354d;border:1px solid #e4e8ef}
+.actions button.alt:hover{border-color:#ae8d57;color:#ae8d57}
+.actions button.danger{background:#a32d2d}.actions button.danger:hover{background:#c23c3c}
 </style></head><body><div class="w">
 <p><a href="${BASE_ABS}/admin?site=${site}">&larr; retour aux prospects (${esc(site)})</a></p>
 <h1>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)}</h1>
 <p class="m">${esc(p.COMPANY || '')} &middot; ${esc(p.INTEREST || '')} &middot; statut <b>${esc(p.STATUS)}</b></p>
+${req.query.ok ? `<p style="background:#e6f4ec;border:1px solid #b7e0c8;color:#1d7a4f;padding:10px 14px;border-radius:9px">${esc(req.query.ok)}</p>` : ''}
+
+<h2>Modifier la fiche</h2>
+<form class="card" method="post" action="${BASE_ABS}/prospect/save">
+  <input type="hidden" name="site" value="${esc(site)}"><input type="hidden" name="id" value="${p.ID}">
+  <div class="kv">
+    <div><span>Prenom</span><input name="first_name" value="${esc(p.FIRST_NAME || '')}" maxlength="80"></div>
+    <div><span>Nom</span><input name="last_name" value="${esc(p.LAST_NAME || '')}" maxlength="80"></div>
+    <div><span>Email</span><input name="email" type="email" value="${esc(p.EMAIL || '')}" maxlength="160"></div>
+    <div><span>Telephone</span><input name="phone" value="${esc(p.PHONE || '')}" maxlength="40"></div>
+    <div><span>Societe</span><input name="company" value="${esc(p.COMPANY || '')}" maxlength="160"></div>
+    <div><span>Objet</span><input name="interest" value="${esc(p.INTEREST || '')}" maxlength="60"></div>
+    <div><span>Statut</span><select name="status">
+      ${['pending', 'email_verified', 'approved', 'rejected'].map(x => `<option${p.STATUS === x ? ' selected' : ''}>${x}</option>`).join('')}
+    </select></div>
+    <div><span>Notes</span><input name="notes" value="${esc(p.NOTES || '')}" maxlength="500"></div>
+  </div>
+  <div class="actions">
+    <button type="submit">Enregistrer</button>
+    <button type="submit" formaction="${BASE_ABS}/prospect/access" class="alt">Renvoyer un lien d'acces</button>
+    <button type="submit" formaction="${BASE_ABS}/prospect/revoke" class="alt">Revoquer les acces</button>
+    <button type="submit" formaction="${BASE_ABS}/prospect/delete" class="danger"
+      onclick="return confirm('Supprimer definitivement ce prospect, ses sessions et ses visites liees ?')">Supprimer</button>
+  </div>
+</form>
 
 <h2>Identite declaree</h2>
 <div class="card kv">
