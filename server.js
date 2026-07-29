@@ -170,12 +170,12 @@ ${og ? `<meta name="description" content="${esc(og.desc)}">
 <meta property="og:site_name" content="Arx Capital">
 <meta property="og:title" content="${esc(og.title)}">
 <meta property="og:description" content="${esc(og.desc)}">
-<meta property="og:image" content="${PUBLIC_URL}/p/${og.img}">
+<meta property="og:image" content="${PUBLIC_URL}/img?site=${encodeURIComponent(og.site)}">
 <meta property="og:image:width" content="1200">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(og.title)}">
 <meta name="twitter:description" content="${esc(og.desc)}">
-<meta name="twitter:image" content="${PUBLIC_URL}/p/${og.img}">` : ''}
+<meta name="twitter:image" content="${PUBLIC_URL}/img?site=${encodeURIComponent(og.site)}">` : ''}
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--navy:#1b354d;--gold:#ae8d57;--border:#e4e8ef;--muted:#5b6472}
@@ -215,33 +215,52 @@ small{color:var(--muted);font-size:.76rem;display:block;margin-top:18px}
 </style></head><body><div class="box">${body}</div></body></html>`;
 
 const BASE_ABS = (process.env.BASE_PATH && process.env.BASE_PATH !== '/') ? process.env.BASE_PATH.replace(/\/$/, '') : '';
-// ---------- metadonnees de partage par site (WhatsApp, LinkedIn, SMS...) ----------
-const META = {
-  '50': {
-    title: 'Innovat Property — Villa Rose, 50 Boulevard d\'Oxford, Cannes',
-    desc: "Villa Belle Epoque de 1880 reinventee par SAOTA — 1 000 m2 tres haut de gamme dans un parc de 2 600 m2, quartier Oxford, Cannes.",
-    img: 'preview-50.jpg',
-  },
-  '877': {
-    title: "Innovat Property — Villa d'exception, Super Cannes",
-    desc: "Villa contemporaine de prestige de 1 200 m2 signee SAOTA, au coeur du Triangle d'Or de Super Cannes.",
-    img: 'preview-877.jpg',
-  },
-  cactus: {
-    title: 'Innovat Property — Les Cactus, Super Cannes',
-    desc: "Deux villas reunies en un domaine ultra-luxe signe SAOTA — 1 300 m2 projetes, deux permis de construire obtenus, Triangle d'Or de Super Cannes.",
-    img: 'preview-cactus.jpg',
-  },
-  arxcapital: {
-    title: 'Arx Capital — Benoit Sigwald, adoption de l\'IA',
-    desc: "J'aide les equipes a travailler avec l'IA : utile, sure, mesurable. 30 ans de conduite du changement technologique.",
-    img: 'preview-arxcapital.png',
-  },
-};
-function meta(site) {
-  return META[site] || { title: 'Arx Capital', desc: 'Acces reserve.', img: 'preview-arxcapital.png' };
-}
+// ---------- metadonnees de partage, lues automatiquement sur le site protege ----------
+// Toute nouvelle porte herite du comportement : la porte va chercher <title>,
+// la description et l'image du site lui-meme, sans configuration.
+const META_OVERRIDE = JSON.parse(Buffer.from(process.env.SITE_META_B64 || '', 'base64').toString() || '{}');
+const metaCache = new Map();          // site -> { title, desc, img, at }
+const META_TTL = 6 * 3600e3;
 
+// jeton interne : permet a la porte de lire le site protege sans passer par le formulaire
+const botToken = site => sign('bot:' + site);
+
+function absolute(base, url) {
+  try { return new URL(url, base).href; } catch { return null; }
+}
+function extractMeta(html, base) {
+  const pick = re => { const m = html.match(re); return m ? m[1].trim() : null; };
+  const title = pick(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i)
+             || pick(/<title[^>]*>([^<]+)</i);
+  const desc = pick(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)/i)
+            || pick(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)/i);
+  let img = pick(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i)
+         || pick(/<img[^>]+src=["']([^"']+\.(?:jpe?g|png|webp))/i)
+         || pick(/url\(['"]?([^'")]+\.(?:jpe?g|png|webp))/i);
+  return { title, desc, img: img ? absolute(base, img) : null };
+}
+async function siteMeta(site) {
+  const over = META_OVERRIDE[site];
+  const hit = metaCache.get(site);
+  if (hit && Date.now() - hit.at < META_TTL) return hit;
+  let m = { title: 'Arx Capital', desc: 'Acces reserve.', img: null };
+  try {
+    const url = siteUrl(site);
+    const r = await fetch(url, {
+      headers: { 'X-Gate-Bot': botToken(site), 'User-Agent': 'arx-gate/1.0' },
+      redirect: 'follow', signal: AbortSignal.timeout(6000),
+    });
+    if (r.ok) {
+      const html = (await r.text()).slice(0, 200000);
+      const x = extractMeta(html, url);
+      if (x.title) m = { title: x.title, desc: x.desc || m.desc, img: x.img };
+    }
+  } catch (e) { console.error('meta', site + ':', e.message); }
+  if (over) m = { ...m, ...over };
+  m.at = Date.now();
+  metaCache.set(site, m);
+  return m;
+}
 // ---------- traductions ----------
 const T = {
   fr: {
@@ -314,14 +333,14 @@ function waitingPage(site, vtoken) {
     }
     setTimeout(check, 4000);
   })();
-  </script>`, meta(site));
+  </script>`, og);
 }
 
 function langLink(l, extra = '') {
   return `<a class="lang" href="?lang=${l === 'fr' ? 'en' : 'fr'}${extra}">${T[l].other}</a>`;
 }
 
-function formPage(site, rd, err, prefill = {}, l = 'fr') {
+function formPage(site, rd, err, prefill = {}, l = 'fr', og = null) {
   const t = T[l];
   const opts = t.interests.map(i => `<option${prefill.interest === i ? ' selected' : ''}>${esc(i)}</option>`).join('');
   const extra = `&site=${encodeURIComponent(site)}${rd ? '&rd=' + encodeURIComponent(rd) : ''}`;
@@ -379,10 +398,10 @@ function formPage(site, rd, err, prefill = {}, l = 'fr') {
     m.addEventListener('click', function(e){ if (e.target === m) m.hidden = true; });
   })();
   </script>
-  <small>${esc(t.foot)}</small>`, meta(site));
+  <small>${esc(t.foot)}</small>`, og);
 }
 
-function waitingPage(site, vtoken, l = 'fr') {
+function waitingPage(site, vtoken, l = 'fr', og = null) {
   const t = T[l];
   return PAGE(t.waitTitle, `<div class="ok">&#9203;</div><h1>${esc(t.waitH1)}</h1>
   <p class="sub">${esc(t.waitSub)}</p>
@@ -402,7 +421,7 @@ function waitingPage(site, vtoken, l = 'fr') {
     }
     setTimeout(check, 4000);
   })();
-  </script>`, meta(site));
+  </script>`, og);
 }
 
 // ---- forwardauth ----
@@ -425,6 +444,8 @@ router.get('/auth', async (req, res) => {
     }
   }
   if (!site) return res.sendStatus(200); // chemin non protégé
+  // lecture interne par la porte (metadonnees de partage)
+  if (req.headers['x-gate-bot'] && req.headers['x-gate-bot'] === botToken(site)) return res.sendStatus(200);
   const c = parseCookieValue(readCookie(req, COOKIE));
   if (c && c.site === site) {
     try {
@@ -440,9 +461,10 @@ router.get('/auth', async (req, res) => {
 });
 
 // ---- formulaire ----
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const site = SITES[req.query.site] ? req.query.site : Object.keys(SITES)[0];
-  res.type('html').send(formPage(site, req.query.rd, null, {}, lang(req)));
+  const og = { ...(await siteMeta(site)), site };
+  res.type('html').send(formPage(site, req.query.rd, null, {}, lang(req), og));
 });
 
 // ---- inscription ----
@@ -524,7 +546,7 @@ router.post('/register', form, async (req, res) => {
     await ntfy('Nouvelle demande d\'accès', who,
       `http, Approuver, ${PUBLIC_URL}/approve?t=${dtoken}&site=${site}, method=POST, clear=true; http, Refuser, ${PUBLIC_URL}/reject?t=${dtoken}&site=${site}, method=POST, clear=true`,
       'high');
-    return res.type('html').send(waitingPage(site, vtoken, l));
+    return res.type('html').send(waitingPage(site, vtoken, l, { ...(await siteMeta(site)), site }));
   } catch (e) {
     console.error('register:', e);
     res.status(500).type('html').send(formPage(site, b.rd, T[l].errTech, b, l));
@@ -1089,6 +1111,21 @@ router.get('/export.csv', async (req, res) => {
 });
 
 router.use('/p', express.static(path.join(__dirname, 'public'), { maxAge: '7d' }));
+
+// image de partage : recuperee sur le site protege et servie publiquement
+router.get('/img', async (req, res) => {
+  const site = SITES[req.query.site] ? req.query.site : null;
+  if (!site) return res.sendStatus(404);
+  try {
+    const m = await siteMeta(site);
+    if (!m.img) return res.redirect(302, `${BASE_ABS}/p/preview-arxcapital.png`);
+    const r = await fetch(m.img, { headers: { 'X-Gate-Bot': botToken(site) }, signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return res.redirect(302, `${BASE_ABS}/p/preview-arxcapital.png`);
+    res.set('Content-Type', r.headers.get('content-type') || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(Buffer.from(await r.arrayBuffer()));
+  } catch (e) { console.error('img:', e.message); res.redirect(302, `${BASE_ABS}/p/preview-arxcapital.png`); }
+});
 router.get('/health', (req, res) => res.send('ok'));
 
 app.use('/', router);
