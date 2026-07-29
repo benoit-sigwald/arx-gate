@@ -194,6 +194,29 @@ small{color:var(--muted);font-size:.76rem;display:block;margin-top:18px}
 const BASE_ABS = (process.env.BASE_PATH && process.env.BASE_PATH !== '/') ? process.env.BASE_PATH.replace(/\/$/, '') : '';
 const INTERESTS = ['Mission de conseil', 'Recrutement', 'Partenariat', 'Investissement', 'Curiosité / veille'];
 
+function waitingPage(site, vtoken) {
+  return PAGE('Demande enregistrée', `<div class="ok">⏳</div><h1>Demande enregistrée</h1>
+  <p class="sub">Votre demande est en cours de validation. Gardez cette page ouverte :
+  elle s'ouvrira automatiquement dès l'accord, en général en quelques minutes.</p>
+  <p class="sub" id="st" style="color:var(--gold)">Validation en attente…</p>
+  <script>
+  (function(){
+    var n = 0;
+    function check(){
+      fetch('${BASE_ABS}/status?site=${encodeURIComponent(site)}&t=${vtoken}')
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          if (j.link) { document.getElementById('st').textContent = 'Accès accordé, ouverture…'; location.href = j.link; return; }
+          if (j.status === 'rejected') { document.getElementById('st').textContent = 'Demande refusée.'; return; }
+          if (++n < 240) setTimeout(check, 5000);
+        })
+        .catch(function(){ if (++n < 240) setTimeout(check, 8000); });
+    }
+    setTimeout(check, 4000);
+  })();
+  </script>`);
+}
+
 function formPage(site, rd, err, prefill = {}) {
   const opts = INTERESTS.map(i => `<option${prefill.interest === i ? ' selected' : ''}>${esc(i)}</option>`).join('');
   return PAGE('Accès', `
@@ -322,8 +345,7 @@ router.post('/register', form, async (req, res) => {
     await ntfy('Nouvelle demande d\'accès', who,
       `http, Approuver, ${PUBLIC_URL}/approve?t=${dtoken}&site=${site}, method=POST, clear=true; http, Refuser, ${PUBLIC_URL}/reject?t=${dtoken}&site=${site}, method=POST, clear=true`,
       'high');
-    return res.type('html').send(PAGE('Demande enregistrée', `<div class="ok">⏳</div><h1>Demande enregistrée</h1>
-      <p class="sub">Votre demande est en cours de validation. Vous recevrez votre lien d'accès par email très vite.</p>`));
+    return res.type('html').send(waitingPage(site, vtoken));
   } catch (e) {
     console.error('register:', e);
     res.status(500).type('html').send(formPage(site, b.rd, 'Erreur technique, réessayez dans un instant.', b));
@@ -349,6 +371,26 @@ router.get('/verify', async (req, res) => {
     res.type('html').send(PAGE('Email confirmé', `<div class="ok">✅</div><h1>Email confirmé</h1>
       <p class="sub">Merci ${esc(p.FIRST_NAME)}. Votre accès est en cours de validation ; vous recevrez le lien par email dès qu'il est activé.</p>`));
   } catch (e) { console.error('verify:', e); res.status(500).send('erreur'); }
+});
+
+// ---- statut (sondage depuis la page d'attente) ----
+router.get('/status', async (req, res) => {
+  const site = SITES[req.query.site] ? req.query.site : null;
+  if (!site || !req.query.t) return res.json({ status: 'unknown' });
+  try {
+    const r = await q(site, 'SELECT id, status FROM prospects WHERE verify_token = :t', { t: req.query.t });
+    if (!r.rows.length) return res.json({ status: 'unknown' });
+    const p = r.rows[0];
+    if (p.STATUS !== 'approved') return res.json({ status: p.STATUS });
+    const sess = await q(site, `SELECT token FROM sessions WHERE prospect_id = :id AND revoked = 0
+      AND expires_at > SYSTIMESTAMP ORDER BY created_at DESC FETCH FIRST 1 ROWS ONLY`, { id: p.ID });
+    let t = sess.rows.length ? sess.rows[0].TOKEN : null;
+    if (!t) {
+      t = tok();
+      await q(site, `INSERT INTO sessions (prospect_id, token, expires_at) VALUES (:id, :t, SYSTIMESTAMP + INTERVAL '90' DAY)`, { id: p.ID, t });
+    }
+    res.json({ status: 'approved', link: `${gateBase(site)}/access?t=${t}&site=${encodeURIComponent(site)}` });
+  } catch (e) { console.error('status:', e.message); res.json({ status: 'error' }); }
 });
 
 // ---- décision (boutons ntfy) ----
