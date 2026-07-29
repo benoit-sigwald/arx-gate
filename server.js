@@ -667,7 +667,7 @@ th{text-align:left;padding:10px 12px;background:#f2f5f9;color:#1b354d;font-size:
 td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
 .m{color:#5b6472;font-size:.78rem}a{color:#ae8d57}
 </style></head><body><div class="w">
-<h1>Prospects</h1><p class="m">Schéma Oracle dédié par site · <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
+<h1>Prospects</h1><p class="m"><a href="${BASE_ABS}/visits?site=${site}"><b>Voir les visites (tracker) &rarr;</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
 <div style="margin:14px 0">${tabs}</div>
 <div class="tiles">
   <div class="tile"><b>${s.TOTAL || 0}</b><span>prospects</span></div>
@@ -681,6 +681,93 @@ td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
 <p class="m" style="margin-top:10px">Cliquez une ligne pour voir tout le parcours de visite du prospect.</p>
 </div></body></html>`);
   } catch (e) { console.error('admin:', e); res.status(500).send('erreur: ' + esc(e.message)); }
+});
+
+router.get('/visits', async (req, res) => {
+  if (!authed(req, res)) return;
+  const site = SITES[req.query.site] ? req.query.site : Object.keys(SITES)[0];
+  try {
+    const [today, week, uniq, ident, pages, refs, last] = await Promise.all([
+      q(site, `SELECT COUNT(*) c FROM visits WHERE ts >= TRUNC(SYSDATE)`),
+      q(site, `SELECT COUNT(*) c FROM visits WHERE ts >= SYSTIMESTAMP - INTERVAL '7' DAY`),
+      q(site, `SELECT COUNT(DISTINCT ip) c FROM visits WHERE ts >= SYSTIMESTAMP - INTERVAL '7' DAY`),
+      q(site, `SELECT COUNT(*) c FROM visits WHERE prospect_id IS NOT NULL AND ts >= SYSTIMESTAMP - INTERVAL '7' DAY`),
+      q(site, `SELECT page, COUNT(*) c FROM visits WHERE ts >= SYSTIMESTAMP - INTERVAL '7' DAY
+               GROUP BY page ORDER BY COUNT(*) DESC FETCH FIRST 10 ROWS ONLY`),
+      q(site, `SELECT referrer, COUNT(*) c FROM visits WHERE ts >= SYSTIMESTAMP - INTERVAL '7' DAY
+               AND referrer IS NOT NULL GROUP BY referrer ORDER BY COUNT(*) DESC FETCH FIRST 10 ROWS ONLY`),
+      q(site, `SELECT v.*, p.first_name, p.last_name, p.company FROM visits v
+               LEFT JOIN prospects p ON p.id = v.prospect_id
+               ORDER BY v.ts DESC FETCH FIRST 150 ROWS ONLY`),
+    ]);
+    const fmt = t => t ? new Date(t).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
+    const first = last.rows.find(v => v.LAT != null);
+    const li = (arr, k) => arr.map(r => `<li><span>${esc(r[k] || '-')}</span><b>${r.C}</b></li>`).join('');
+    const tabs = Object.keys(SITES).map(x =>
+      `<a href="${BASE_ABS}/visits?site=${x}" style="padding:6px 14px;border:1px solid #e4e8ef;border-radius:8px;text-decoration:none;
+        color:${x === site ? '#fff' : '#1b354d'};background:${x === site ? '#1b354d' : '#fff'};font-size:.85rem">${esc(x)}</a>`).join(' ');
+    const rows = last.rows.map(v => `<tr>
+      <td>${v.LAT != null ? `<a href="#map" class="pin" data-ll="${v.LAT},${v.LON}" data-label="${esc((v.CITY || '') + ' ' + (v.COUNTRY || '') + ' - ' + v.IP)}">&#128205;</a>` : ''}</td>
+      <td>${fmt(v.TS)}</td>
+      <td>${v.PROSPECT_ID ? `<a href="${BASE_ABS}/prospect?site=${site}&id=${v.PROSPECT_ID}"><b>${esc(v.FIRST_NAME || '')} ${esc(v.LAST_NAME || '')}</b><br><span class="m">${esc(v.COMPANY || '')}</span></a>` : '<span class="m">anonyme</span>'}</td>
+      <td>${esc(v.PAGE || '')}</td>
+      <td>${esc(v.CITY || '')}${v.CITY ? ', ' : ''}${esc(v.COUNTRY || '')}</td>
+      <td class="m">${esc(v.ORG || v.ISP || '')}</td>
+      <td class="m">${esc(v.BROWSER || '')} &middot; ${esc(v.OS || '')} &middot; ${esc(v.DEVICE || '')}</td>
+      <td class="m">${esc(v.REFERRER || '-')}</td>
+      <td class="m">${esc(v.IP || '')}</td></tr>`).join('');
+    res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Visites - ${esc(site)}</title><style>
+body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
+.w{max-width:1250px;margin:0 auto}h1{font-size:1.4rem;margin:0 0 4px;color:#1b354d}
+h2{font-size:.95rem;margin-bottom:10px;color:#1b354d}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:18px 0}
+.tile{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:16px}
+.tile b{display:block;font-size:1.7rem;color:#1b354d}.tile span{color:#5b6472;font-size:.8rem}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+@media(max-width:760px){.cols{grid-template-columns:1fr}}
+.card{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:18px}
+.card ul{list-style:none;margin:0;padding:0}
+.card li{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #e4e8ef;font-size:.85rem}
+.card li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#5b6472}.card li b{color:#ae8d57}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e4e8ef;border-radius:12px;overflow:hidden;font-size:.82rem}
+th{text-align:left;padding:9px 10px;background:#f2f5f9;color:#1b354d;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em}
+td{padding:8px 10px;border-top:1px solid #e4e8ef;vertical-align:top;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.m{color:#5b6472;font-size:.78rem}a{color:#ae8d57;text-decoration:none}a.pin{font-size:1rem}
+iframe{width:100%;height:320px;border:0;border-radius:10px}
+.nav a{margin-right:10px}
+</style></head><body><div class="w">
+<h1>Visites</h1>
+<p class="m nav"><a href="${BASE_ABS}/admin?site=${site}">&larr; prospects</a> &middot; schema Oracle dedie par site</p>
+<div style="margin:14px 0">${tabs}</div>
+<div class="tiles">
+  <div class="tile"><b>${today.rows[0].C}</b><span>visites aujourd'hui</span></div>
+  <div class="tile"><b>${week.rows[0].C}</b><span>visites - 7 jours</span></div>
+  <div class="tile"><b>${uniq.rows[0].C}</b><span>visiteurs uniques - 7 j</span></div>
+  <div class="tile"><b>${ident.rows[0].C}</b><span>visites identifiees - 7 j</span></div>
+</div>
+<div class="cols">
+  <div class="card"><h2>Top pages - 7 jours</h2><ul>${li(pages.rows, 'PAGE')}</ul></div>
+  <div class="card"><h2>Top referrers - 7 jours</h2><ul>${li(refs.rows, 'REFERRER') || '<li><span>aucun</span><b>0</b></li>'}</ul></div>
+</div>
+<div class="card" id="map" style="margin-bottom:20px">
+  <h2>Localisation - <span id="maplabel">${first ? esc((first.CITY || '') + ', ' + (first.COUNTRY || '') + ' - ' + first.IP) : 'aucune visite geolocalisee'}</span></h2>
+  <iframe id="gmap" title="Carte" loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+    src="${first ? `https://maps.google.com/maps?q=${first.LAT},${first.LON}&z=11&output=embed` : 'about:blank'}"></iframe>
+  <p class="m" style="margin-top:8px">Position approximative de l'IP. Cliquez un &#128205; pour situer une visite.</p>
+</div>
+<table><thead><tr><th></th><th>Quand</th><th>Prospect</th><th>Page</th><th>Ville, pays</th><th>Organisation / ISP</th><th>Appareil</th><th>Referrer</th><th>IP</th></tr></thead>
+<tbody>${rows || '<tr><td colspan="9">Aucune visite.</td></tr>'}</tbody></table>
+<script>
+document.addEventListener('click', function(e){
+  var a = e.target.closest('a.pin'); if(!a) return;
+  document.getElementById('gmap').src = 'https://maps.google.com/maps?q=' + a.getAttribute('data-ll') + '&z=11&output=embed';
+  document.getElementById('maplabel').textContent = a.getAttribute('data-label');
+});
+</script>
+</div></body></html>`);
+  } catch (e) { console.error('visits:', e); res.status(500).send('erreur: ' + esc(e.message)); }
 });
 
 router.get('/prospect', async (req, res) => {
