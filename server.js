@@ -217,6 +217,8 @@ const T = {
     badTitle: 'Lien invalide', badH1: 'Lien invalide ou expiré',
     interests: ['Mission de conseil', 'Recrutement', 'Partenariat', 'Investissement', 'Curiosité / veille'],
     other: 'English',
+    rgpd: 'Merci d\'accepter la conservation de vos données pour continuer.',
+    rgpdTitle: 'Consentement requis',
   },
   en: {
     title: 'Access', h1: 'Private access',
@@ -236,7 +238,9 @@ const T = {
     okSub: 'Your access is being reviewed; you will get the link as soon as it is activated.',
     badTitle: 'Invalid link', badH1: 'Invalid or expired link',
     interests: ['Consulting engagement', 'Recruitment', 'Partnership', 'Investment', 'Curiosity / research'],
-    other: 'Francais',
+    other: 'Français',
+    rgpd: 'Please accept the data notice to continue.',
+    rgpdTitle: 'Consent required',
   },
 };
 const lang = req => (String(req.query.lang || '').toLowerCase() === 'en'
@@ -299,6 +303,28 @@ function formPage(site, rd, err, prefill = {}, l = 'fr') {
     </div>
     <button type="submit">${esc(t.submit)}</button>
   </form>
+  <div id="rgpd-modal" hidden style="position:fixed;inset:0;background:rgba(27,53,77,.65);display:flex;
+       align-items:center;justify-content:center;padding:24px;z-index:50">
+    <div style="background:#fff;border-radius:14px;padding:28px;max-width:420px;text-align:center;
+         box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="font-size:2rem;margin-bottom:8px">&#128274;</div>
+      <h1 style="font-size:1.15rem;margin-bottom:8px">${esc(t.rgpdTitle)}</h1>
+      <p class="sub" style="margin-bottom:18px">${esc(t.rgpd)}</p>
+      <button type="button" id="rgpd-ok" style="margin:0">OK</button>
+    </div>
+  </div>
+  <script>
+  (function(){
+    var f = document.querySelector('form'), c = document.getElementById('c'),
+        m = document.getElementById('rgpd-modal');
+    c.addEventListener('invalid', function(e){ e.preventDefault(); });
+    f.addEventListener('submit', function(e){
+      if (!c.checked) { e.preventDefault(); m.hidden = false; }
+    });
+    document.getElementById('rgpd-ok').addEventListener('click', function(){ m.hidden = true; c.focus(); });
+    m.addEventListener('click', function(e){ if (e.target === m) m.hidden = true; });
+  })();
+  </script>
   <small>${esc(t.foot)}</small>`);
 }
 
@@ -363,7 +389,10 @@ router.post('/register', form, async (req, res) => {
   const email = String(b.email || '').trim().toLowerCase();
   const need = ['first_name', 'last_name', 'phone', 'company', 'interest'];
   const missing = need.some(k => !String(b[k] || '').trim());
-  if (missing || !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email) || !b.consent) {
+  if (!b.consent) {
+    return res.type('html').send(formPage(site, b.rd, T[l].rgpd, b, l));
+  }
+  if (missing || !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) {
     return res.type('html').send(formPage(site, b.rd, T[l].err, b, l));
   }
   try {
