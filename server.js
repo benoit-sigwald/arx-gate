@@ -510,7 +510,8 @@ router.get('/admin', async (req, res) => {
   try {
     const [pros, stats, last] = await Promise.all([
       q(site, `SELECT p.*, (SELECT COUNT(*) FROM visits v WHERE v.prospect_id = p.id) nb,
-                (SELECT MAX(ts) FROM visits v WHERE v.prospect_id = p.id) last_seen
+                (SELECT MAX(ts) FROM visits v WHERE v.prospect_id = p.id) last_seen,
+                (SELECT page FROM (SELECT page FROM visits v WHERE v.prospect_id = p.id ORDER BY ts DESC) WHERE ROWNUM = 1) last_page
                FROM prospects p ORDER BY p.created_at DESC FETCH FIRST 200 ROWS ONLY`),
       q(site, `SELECT COUNT(*) total,
                 SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) approved,
@@ -524,14 +525,15 @@ router.get('/admin', async (req, res) => {
     const tabs = Object.keys(SITES).map(x =>
       `<a href="${BASE_ABS}/admin?site=${x}" style="padding:6px 14px;border:1px solid #e4e8ef;border-radius:8px;text-decoration:none;
         color:${x === site ? '#fff' : '#1b354d'};background:${x === site ? '#1b354d' : '#fff'};font-size:.85rem">${esc(x)}</a>`).join(' ');
-    const rows = pros.rows.map(p => `<tr>
+    const rows = pros.rows.map(p => `<tr onclick="location.href='${BASE_ABS}/prospect?site=${site}&id=${p.ID}'" style="cursor:pointer">
       <td>${fmt(p.CREATED_AT)}</td>
       <td><b>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)}</b><br><span class="m">${esc(p.COMPANY || '')}</span></td>
       <td>${esc(p.EMAIL)}<br><span class="m">${esc(p.PHONE || '')}</span></td>
       <td>${esc(p.INTEREST || '')}</td>
       <td>${esc(p.CITY || '')} ${esc(p.COUNTRY || '')}<br><span class="m">${esc(p.ORG || p.ISP || '')}</span></td>
       <td><span style="color:${badge(p.STATUS)};font-weight:600">${esc(p.STATUS)}</span></td>
-      <td>${p.NB || 0}<br><span class="m">${fmt(p.LAST_SEEN)}</span></td></tr>`).join('');
+      <td><b>${p.NB || 0}</b> visite(s)<br><span class="m">${p.NB ? 'derniere ' + fmt(p.LAST_SEEN) : '-'}</span></td>
+      <td class="m">${esc(p.LAST_PAGE || '-')}<br><span class="m">${esc(p.BROWSER || '')} ${esc(p.DEVICE || '')}</span></td></tr>`).join('');
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Prospects — ${esc(site)}</title><style>
@@ -554,17 +556,112 @@ td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
   <div class="tile"><b>${s.PENDING || 0}</b><span>email non confirmé</span></div>
   <div class="tile"><b>${last.rows[0].C}</b><span>visites 7 jours</span></div>
 </div>
-<table><thead><tr><th>Inscrit</th><th>Personne</th><th>Contact</th><th>Objet</th><th>Lieu / organisation</th><th>Statut</th><th>Visites</th></tr></thead>
-<tbody>${rows || '<tr><td colspan="7">Aucun prospect pour ce site.</td></tr>'}</tbody></table>
+<table><thead><tr><th>Inscrit</th><th>Personne</th><th>Contact</th><th>Objet</th><th>Lieu / organisation</th><th>Statut</th><th>Visites</th><th>Derniere page</th></tr></thead>
+<tbody>${rows || '<tr><td colspan="8">Aucun prospect pour ce site.</td></tr>'}</tbody></table>
+<p class="m" style="margin-top:10px">Cliquez une ligne pour voir tout le parcours de visite du prospect.</p>
 </div></body></html>`);
   } catch (e) { console.error('admin:', e); res.status(500).send('erreur: ' + esc(e.message)); }
+});
+
+router.get('/prospect', async (req, res) => {
+  if (!authed(req, res)) return;
+  const site = SITES[req.query.site] ? req.query.site : null;
+  const id = Number(req.query.id);
+  if (!site || !id) return res.status(400).send('parametres manquants');
+  try {
+    const [pr, vis, acc, agg] = await Promise.all([
+      q(site, 'SELECT * FROM prospects WHERE id = :id', { id }),
+      q(site, 'SELECT * FROM visits WHERE prospect_id = :id ORDER BY ts DESC FETCH FIRST 300 ROWS ONLY', { id }),
+      q(site, 'SELECT * FROM access_log WHERE prospect_id = :id ORDER BY ts DESC FETCH FIRST 50 ROWS ONLY', { id }),
+      q(site, `SELECT page, COUNT(*) c, MAX(ts) last_ts FROM visits WHERE prospect_id = :id
+               GROUP BY page ORDER BY COUNT(*) DESC FETCH FIRST 15 ROWS ONLY`, { id }),
+    ]);
+    if (!pr.rows.length) return res.status(404).send('prospect inconnu');
+    const p = pr.rows[0];
+    const fmt = t => t ? new Date(t).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
+    const first = vis.rows.length ? vis.rows[vis.rows.length - 1].TS : null;
+    const last = vis.rows.length ? vis.rows[0].TS : null;
+    const ll = vis.rows.find(v => v.LAT != null);
+    res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)} - prospect</title><style>
+body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
+.w{max-width:1100px;margin:0 auto}h1{font-size:1.4rem;margin:0 0 4px;color:#1b354d}
+h2{font-size:1rem;color:#1b354d;margin:26px 0 10px}
+.card{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:18px}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.kv div span{display:block;color:#5b6472;font-size:.75rem;text-transform:uppercase;letter-spacing:.06em}
+.kv div b{font-weight:600;font-size:.95rem}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e4e8ef;border-radius:12px;overflow:hidden;font-size:.85rem}
+th{text-align:left;padding:9px 12px;background:#f2f5f9;color:#1b354d;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}
+td{padding:9px 12px;border-top:1px solid #e4e8ef}
+.m{color:#5b6472;font-size:.8rem}a{color:#ae8d57}
+iframe{width:100%;height:280px;border:0;border-radius:10px}
+</style></head><body><div class="w">
+<p><a href="${BASE_ABS}/admin?site=${site}">&larr; retour aux prospects (${esc(site)})</a></p>
+<h1>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)}</h1>
+<p class="m">${esc(p.COMPANY || '')} &middot; ${esc(p.INTEREST || '')} &middot; statut <b>${esc(p.STATUS)}</b></p>
+
+<h2>Identite declaree</h2>
+<div class="card kv">
+  <div><span>Email</span><b>${esc(p.EMAIL)}</b></div>
+  <div><span>Telephone</span><b>${esc(p.PHONE || '-')}</b></div>
+  <div><span>Societe</span><b>${esc(p.COMPANY || '-')}</b></div>
+  <div><span>Inscrit le</span><b>${fmt(p.CREATED_AT)}</b></div>
+  <div><span>Email confirme</span><b>${fmt(p.VERIFIED_AT)}</b></div>
+  <div><span>Decision</span><b>${fmt(p.DECIDED_AT)}</b></div>
+  <div><span>Consentement RGPD</span><b>${p.CONSENT_RGPD ? 'oui - ' + fmt(p.CONSENT_AT) : 'non'}</b></div>
+</div>
+
+<h2>Donnees du tracker</h2>
+<div class="card kv">
+  <div><span>Visites</span><b>${vis.rows.length}</b></div>
+  <div><span>Premiere visite</span><b>${fmt(first)}</b></div>
+  <div><span>Derniere visite</span><b>${fmt(last)}</b></div>
+  <div><span>Ville / pays</span><b>${esc(p.CITY || '-')}, ${esc(p.COUNTRY || '-')}</b></div>
+  <div><span>Organisation / FAI</span><b>${esc(p.ORG || p.ISP || '-')}</b></div>
+  <div><span>Reseau (ASN)</span><b>${esc(p.ASN || '-')}</b></div>
+  <div><span>IP d'inscription</span><b>${esc(p.SIGNUP_IP || '-')}</b></div>
+  <div><span>Appareil</span><b>${esc(p.BROWSER || '')} &middot; ${esc(p.OS || '')} &middot; ${esc(p.DEVICE || '')}</b></div>
+  <div><span>Langue</span><b>${esc(p.LANG || '-')}</b></div>
+  <div><span>Venu de</span><b>${esc(p.REFERRER || 'acces direct')}</b></div>
+  <div><span>Page d'entree</span><b>${esc(p.LANDING || '-')}</b></div>
+  <div><span>Campagne</span><b>${esc([p.UTM_SOURCE, p.UTM_MEDIUM, p.UTM_CAMPAIGN].filter(Boolean).join(' / ') || '-')}</b></div>
+</div>
+
+${ll ? `<h2>Localisation approximative</h2><div class="card"><iframe loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+  src="https://maps.google.com/maps?q=${ll.LAT},${ll.LON}&z=11&output=embed"></iframe></div>` : ''}
+
+<h2>Pages les plus consultees</h2>
+<table><thead><tr><th>Page</th><th>Vues</th><th>Derniere</th></tr></thead><tbody>
+${agg.rows.map(a => `<tr><td>${esc(a.PAGE)}</td><td>${a.C}</td><td class="m">${fmt(a.LAST_TS)}</td></tr>`).join('') || '<tr><td colspan="3">Aucune visite tracee.</td></tr>'}
+</tbody></table>
+
+<h2>Parcours detaille</h2>
+<table><thead><tr><th>Quand</th><th>Page</th><th>Venu de</th><th>Appareil</th><th>Ville</th><th>IP</th></tr></thead><tbody>
+${vis.rows.map(v => `<tr><td>${fmt(v.TS)}</td><td>${esc(v.PAGE)}</td><td class="m">${esc(v.REFERRER || '-')}</td>
+  <td class="m">${esc(v.BROWSER)} ${esc(v.OS)} ${esc(v.DEVICE)}</td><td class="m">${esc(v.CITY || '')}</td>
+  <td class="m">${esc(v.IP)}</td></tr>`).join('') || '<tr><td colspan="6">Aucune visite tracee.</td></tr>'}
+</tbody></table>
+
+<h2>Journal d'acces</h2>
+<table><thead><tr><th>Quand</th><th>Evenement</th><th>Depuis</th></tr></thead><tbody>
+${acc.rows.map(a => `<tr><td>${fmt(a.TS)}</td><td>${esc(a.EVENT)}</td><td class="m">${esc(a.IP)}</td></tr>`).join('') || '<tr><td colspan="3">-</td></tr>'}
+</tbody></table>
+</div></body></html>`);
+  } catch (e) { console.error('prospect:', e); res.status(500).send('erreur: ' + esc(e.message)); }
 });
 
 router.get('/export.csv', async (req, res) => {
   if (!authed(req, res)) return;
   const site = SITES[req.query.site] ? req.query.site : Object.keys(SITES)[0];
-  const r = await q(site, 'SELECT * FROM prospects ORDER BY created_at DESC');
-  const cols = ['CREATED_AT', 'FIRST_NAME', 'LAST_NAME', 'EMAIL', 'PHONE', 'COMPANY', 'INTEREST', 'STATUS', 'CITY', 'COUNTRY', 'ORG', 'ISP', 'SITE'];
+  const r = await q(site, `SELECT p.*, (SELECT COUNT(*) FROM visits v WHERE v.prospect_id = p.id) nb_visites,
+      (SELECT MIN(ts) FROM visits v WHERE v.prospect_id = p.id) premiere_visite,
+      (SELECT MAX(ts) FROM visits v WHERE v.prospect_id = p.id) derniere_visite
+    FROM prospects p ORDER BY p.created_at DESC`);
+  const cols = ['CREATED_AT', 'FIRST_NAME', 'LAST_NAME', 'EMAIL', 'PHONE', 'COMPANY', 'INTEREST', 'STATUS',
+    'CITY', 'COUNTRY', 'ORG', 'ISP', 'ASN', 'BROWSER', 'OS', 'DEVICE', 'LANG', 'REFERRER', 'LANDING',
+    'UTM_SOURCE', 'UTM_MEDIUM', 'UTM_CAMPAIGN', 'SIGNUP_IP', 'NB_VISITES', 'PREMIERE_VISITE', 'DERNIERE_VISITE', 'SITE'];
   const csv = [cols.join(';')].concat(r.rows.map(x => cols.map(c => `"${String(x[c] ?? '').replace(/"/g, '""')}"`).join(';'))).join('\n');
   res.type('text/csv').set('Content-Disposition', `attachment; filename="prospects-${site}.csv"`).send(csv);
 });
