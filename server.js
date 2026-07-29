@@ -191,6 +191,7 @@ a{color:var(--gold)}
 small{color:var(--muted);font-size:.76rem;display:block;margin-top:18px}
 </style></head><body><div class="box">${body}</div></body></html>`;
 
+const BASE_ABS = (process.env.BASE_PATH && process.env.BASE_PATH !== '/') ? process.env.BASE_PATH.replace(/\/$/, '') : '';
 const INTERESTS = ['Mission de conseil', 'Recrutement', 'Partenariat', 'Investissement', 'Curiosité / veille'];
 
 function formPage(site, rd, err, prefill = {}) {
@@ -200,7 +201,7 @@ function formPage(site, rd, err, prefill = {}) {
   <p class="sub">Cet espace est privé. Présentez-vous en quelques secondes : vous recevrez un email de
   confirmation, puis votre accès sera activé après validation.</p>
   ${err ? `<div class="err">${esc(err)}</div>` : ''}
-  <form method="post" action="register">
+  <form method="post" action="${BASE_ABS}/register">
     <input type="hidden" name="site" value="${esc(site)}"><input type="hidden" name="rd" value="${esc(rd || '')}">
     <div class="row">
       <div><label>Prénom *</label><input name="first_name" required maxlength="80" value="${esc(prefill.first_name || '')}"></div>
@@ -466,7 +467,7 @@ router.get('/admin', async (req, res) => {
     const fmt = t => t ? new Date(t).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
     const badge = st => ({ approved: '#1d7a4f', email_verified: '#ae8d57', pending: '#8a8f98', rejected: '#a32d2d' }[st] || '#8a8f98');
     const tabs = Object.keys(SITES).map(x =>
-      `<a href="admin?site=${x}" style="padding:6px 14px;border:1px solid #e4e8ef;border-radius:8px;text-decoration:none;
+      `<a href="${BASE_ABS}/admin?site=${x}" style="padding:6px 14px;border:1px solid #e4e8ef;border-radius:8px;text-decoration:none;
         color:${x === site ? '#fff' : '#1b354d'};background:${x === site ? '#1b354d' : '#fff'};font-size:.85rem">${esc(x)}</a>`).join(' ');
     const rows = pros.rows.map(p => `<tr>
       <td>${fmt(p.CREATED_AT)}</td>
@@ -489,7 +490,7 @@ th{text-align:left;padding:10px 12px;background:#f2f5f9;color:#1b354d;font-size:
 td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
 .m{color:#5b6472;font-size:.78rem}a{color:#ae8d57}
 </style></head><body><div class="w">
-<h1>Prospects</h1><p class="m">Schéma Oracle dédié par site · <a href="export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
+<h1>Prospects</h1><p class="m">Schéma Oracle dédié par site · <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
 <div style="margin:14px 0">${tabs}</div>
 <div class="tiles">
   <div class="tile"><b>${s.TOTAL || 0}</b><span>prospects</span></div>
