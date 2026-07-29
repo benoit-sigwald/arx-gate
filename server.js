@@ -219,6 +219,7 @@ const T = {
     other: 'English',
     rgpd: 'Merci d\'accepter la conservation de vos données pour continuer.',
     rgpdTitle: 'Consentement requis',
+    rgpdAccept: "J'accepte et je continue", rgpdCancel: 'Annuler',
   },
   en: {
     title: 'Access', h1: 'Private access',
@@ -241,6 +242,7 @@ const T = {
     other: 'Français',
     rgpd: 'Please accept the data notice to continue.',
     rgpdTitle: 'Consent required',
+    rgpdAccept: 'I agree and continue', rgpdCancel: 'Cancel',
   },
 };
 const lang = req => (String(req.query.lang || '').toLowerCase() === 'en'
@@ -310,7 +312,10 @@ function formPage(site, rd, err, prefill = {}, l = 'fr') {
       <div style="font-size:2rem;margin-bottom:8px">&#128274;</div>
       <h1 style="font-size:1.15rem;margin-bottom:8px">${esc(t.rgpdTitle)}</h1>
       <p class="sub" style="margin-bottom:18px">${esc(t.rgpd)}</p>
-      <button type="button" id="rgpd-ok" style="margin:0">OK</button>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button type="button" id="rgpd-accept" style="margin:0">${esc(t.rgpdAccept)}</button>
+        <button type="button" id="rgpd-cancel" style="margin:0;background:#fff;color:#1b354d;border:1px solid var(--border)">${esc(t.rgpdCancel)}</button>
+      </div>
     </div>
   </div>
   <script>
@@ -320,7 +325,10 @@ function formPage(site, rd, err, prefill = {}, l = 'fr') {
     f.addEventListener('submit', function(e){
       if (!c.checked) { e.preventDefault(); m.hidden = false; }
     });
-    document.getElementById('rgpd-ok').addEventListener('click', function(){ m.hidden = true; c.focus(); });
+    document.getElementById('rgpd-accept').addEventListener('click', function(){
+      c.checked = true; m.hidden = true; f.submit();
+    });
+    document.getElementById('rgpd-cancel').addEventListener('click', function(){ m.hidden = true; c.focus(); });
     m.addEventListener('click', function(e){ if (e.target === m) m.hidden = true; });
   })();
   </script>
