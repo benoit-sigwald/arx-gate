@@ -160,7 +160,7 @@ function parseCookieValue(v) {
 const app = express();
 app.set('trust proxy', true);
 const router = express.Router();
-router.use(express.urlencoded({ extended: false, limit: '16kb' }));
+const form = express.urlencoded({ extended: false, limit: '16kb' });
 
 const PAGE = (title, body) => `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
@@ -257,7 +257,7 @@ router.get('/', (req, res) => {
 });
 
 // ---- inscription ----
-router.post('/register', async (req, res) => {
+router.post('/register', form, async (req, res) => {
   const b = req.body || {};
   const site = SITES[b.site] ? b.site : null;
   if (!site) return res.status(400).send('site inconnu');
@@ -416,7 +416,13 @@ router.get('/t.js', (req, res) => res.type('application/javascript').send(BEACON
 router.post('/t', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => {
   res.sendStatus(204);
   try {
-    let b = {}; try { b = JSON.parse(req.body || '{}'); } catch {}
+    let b = req.body;
+    if (typeof b === 'string') { try { b = JSON.parse(b || '{}'); } catch { b = {}; } }
+    if (!b || typeof b !== 'object') b = {};
+    // corps envoye en x-www-form-urlencoded contenant du JSON (clef unique)
+    if (!b.site && Object.keys(b).length === 1) {
+      try { b = JSON.parse(Object.keys(b)[0]); } catch {}
+    }
     const site = SITES[b.site] ? b.site : null;
     if (!site) return;
     const ip = clientIp(req), ua = req.headers['user-agent'] || '';
