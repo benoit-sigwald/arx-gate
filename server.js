@@ -239,10 +239,38 @@ function extractMeta(html, base) {
          || pick(/url\(['"]?([^'")]+\.(?:jpe?g|png|webp))/i);
   return { title, desc, img: img ? absolute(base, img) : null };
 }
+// table SHARE_META (1 ligne par site, dans le schema du site)
+async function ensureShareTable(site) {
+  try { await q(site, 'SELECT 1 FROM share_meta FETCH FIRST 1 ROWS ONLY'); }
+  catch (e) {
+    if (!String(e.message).includes('ORA-00942')) throw e;
+    await q(site, `CREATE TABLE share_meta (
+      id NUMBER DEFAULT 1 PRIMARY KEY,
+      title VARCHAR2(300), descr VARCHAR2(600), img VARCHAR2(600),
+      updated_at TIMESTAMP DEFAULT SYSTIMESTAMP)`);
+  }
+}
+async function dbMeta(site) {
+  try {
+    await ensureShareTable(site);
+    const r = await q(site, 'SELECT title, descr, img FROM share_meta WHERE id = 1');
+    if (r.rows.length) return { title: r.rows[0].TITLE, desc: r.rows[0].DESCR, img: r.rows[0].IMG };
+  } catch (e) { console.error('dbMeta', site + ':', e.message); }
+  return null;
+}
+
 async function siteMeta(site) {
   const over = META_OVERRIDE[site];
   const hit = metaCache.get(site);
   if (hit && Date.now() - hit.at < META_TTL) return hit;
+  // 1) fiche enregistree en base : elle a la priorite
+  const fromDb = await dbMeta(site);
+  if (fromDb && (fromDb.title || fromDb.desc || fromDb.img)) {
+    const m = { title: fromDb.title || 'Arx Capital', desc: fromDb.desc || '', img: fromDb.img || null,
+                source: 'base', at: Date.now() };
+    metaCache.set(site, m);
+    return m;
+  }
   let m = { title: 'Arx Capital', desc: 'Acces reserve.', img: null };
   try {
     const url = siteUrl(site);
@@ -257,6 +285,7 @@ async function siteMeta(site) {
     }
   } catch (e) { console.error('meta', site + ':', e.message); }
   if (over) m = { ...m, ...over };
+  m.source = 'automatique';
   m.at = Date.now();
   metaCache.set(site, m);
   return m;
@@ -746,7 +775,7 @@ th{text-align:left;padding:10px 12px;background:#f2f5f9;color:#1b354d;font-size:
 td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
 .m{color:#5b6472;font-size:.78rem}a{color:#ae8d57}
 </style></head><body><div class="w">
-<h1>Prospects</h1><p class="m"><a href="${BASE_ABS}/prospect/new?site=${site}"><b>+ Ajouter un prospect</b></a> &middot; <a href="${BASE_ABS}/visits?site=${site}"><b>Voir les visites (tracker) &rarr;</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
+<h1>Prospects</h1><p class="m"><a href="${BASE_ABS}/prospect/new?site=${site}"><b>+ Ajouter un prospect</b></a> &middot; <a href="${BASE_ABS}/visits?site=${site}"><b>Voir les visites (tracker) &rarr;</b></a> &middot; <a href="${BASE_ABS}/share"><b>Liens partages</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
 <div style="margin:14px 0">${tabs}</div>
 <div class="tiles">
   <div class="tile"><b>${s.TOTAL || 0}</b><span>prospects</span></div>
@@ -884,6 +913,103 @@ router.post('/prospect/create', form, async (req, res) => {
     console.log(`[admin] prospect cree manuellement (${site})`);
     adminBack(res, site, r.outBinds.id[0], 'Prospect cree');
   } catch (e) { console.error('create:', e.message); res.status(500).send('erreur: ' + esc(e.message)); }
+});
+
+// ---- administration des liens partages ----
+router.get('/share', async (req, res) => {
+  if (!authed(req, res)) return;
+  try {
+    const cards = [];
+    for (const site of Object.keys(SITES)) {
+      const db = await dbMeta(site);
+      const auto = await siteMeta(site);
+      const m = db && (db.title || db.desc || db.img) ? db : auto;
+      const src = db && (db.title || db.desc || db.img) ? 'enregistre en base' : 'lu automatiquement sur le site';
+      cards.push(`
+      <form class="card" method="post" action="${BASE_ABS}/share/save">
+        <input type="hidden" name="site" value="${esc(site)}">
+        <div class="head">
+          <h2>${esc(site)}</h2>
+          <span class="tag">${esc(src)}</span>
+        </div>
+        <div class="prev">
+          <img src="${BASE_ABS}/img?site=${encodeURIComponent(site)}&v=${Date.now()}" alt="">
+          <div>
+            <label>Titre affiche</label>
+            <input name="title" value="${esc(m.title || '')}" maxlength="300">
+            <label>Description</label>
+            <input name="descr" value="${esc(m.desc || '')}" maxlength="600">
+            <label>Image (URL complete, vide = image du site)</label>
+            <input name="img" value="${esc(m.img || '')}" maxlength="600">
+          </div>
+        </div>
+        <div class="row">
+          <button type="submit">Enregistrer</button>
+          <button type="submit" formaction="${BASE_ABS}/share/delete" class="alt"
+            onclick="return confirm('Revenir a la lecture automatique pour ${esc(site)} ?')">Supprimer la fiche</button>
+          <a class="lnk" href="${siteUrl(site)}" target="_blank" rel="noopener">${esc(siteUrl(site))}</a>
+        </div>
+      </form>`);
+    }
+    res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Liens partages</title><style>
+body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
+.w{max-width:900px;margin:0 auto}h1{font-size:1.4rem;color:#1b354d;margin:0 0 4px}
+.card{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:20px;margin-bottom:16px}
+.head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.head h2{font-size:1.05rem;color:#1b354d;margin:0}
+.tag{font-size:.72rem;color:#8a6d3b;background:#f4ede0;border:1px solid #e6d9c2;border-radius:6px;padding:2px 8px}
+.prev{display:grid;grid-template-columns:200px 1fr;gap:16px;align-items:start}
+@media(max-width:640px){.prev{grid-template-columns:1fr}}
+.prev img{width:100%;border-radius:10px;border:1px solid #e4e8ef;background:#f2f5f9}
+label{display:block;font-size:.74rem;font-weight:600;color:#1b354d;margin:10px 0 3px}
+input{width:100%;padding:9px 11px;border:1px solid #e4e8ef;border-radius:8px;font:inherit;font-size:.9rem}
+input:focus{outline:none;border-color:#ae8d57}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px}
+button{padding:9px 16px;border:none;border-radius:9px;background:#1b354d;color:#fff;font:inherit;font-weight:600;font-size:.86rem;cursor:pointer}
+button.alt{background:#fff;color:#1b354d;border:1px solid #e4e8ef}
+button.alt:hover{border-color:#a32d2d;color:#a32d2d}
+a{color:#ae8d57;text-decoration:none;font-size:.82rem}
+.m{color:#5b6472;font-size:.85rem}
+</style></head><body><div class="w">
+<h1>Liens partages</h1>
+<p class="m"><a href="${BASE_ABS}/admin">&larr; prospects</a> &middot; ce que voient WhatsApp, LinkedIn ou iMessage quand vous partagez un lien protege.
+${req.query.ok ? `<b style="color:#1d7a4f"> &middot; ${esc(req.query.ok)}</b>` : ''}</p>
+${cards.join('')}
+<p class="m">Astuce : WhatsApp garde l'apercu en cache. Ajoutez <code>?v=2</code> a la fin du lien pour forcer sa regeneration.</p>
+</div></body></html>`);
+  } catch (e) { console.error('share:', e); res.status(500).send('erreur: ' + esc(e.message)); }
+});
+
+router.post('/share/save', form, async (req, res) => {
+  if (!authed(req, res)) return;
+  const site = SITES[req.body.site] ? req.body.site : null;
+  if (!site) return res.status(400).send('site inconnu');
+  try {
+    await ensureShareTable(site);
+    await q(site, `MERGE INTO share_meta d USING (SELECT 1 id FROM dual) x ON (d.id = x.id)
+      WHEN MATCHED THEN UPDATE SET title=:t, descr=:d, img=:i, updated_at=SYSTIMESTAMP
+      WHEN NOT MATCHED THEN INSERT (id, title, descr, img) VALUES (1, :t2, :d2, :i2)`, {
+      t: cut(req.body.title, 300), d: cut(req.body.descr, 600), i: cut(req.body.img, 600),
+      t2: cut(req.body.title, 300), d2: cut(req.body.descr, 600), i2: cut(req.body.img, 600) });
+    metaCache.delete(site);
+    console.log(`[share] fiche ${site} enregistree`);
+    res.redirect(302, `${BASE_ABS}/share?ok=${encodeURIComponent('Fiche ' + site + ' enregistree')}`);
+  } catch (e) { console.error('share-save:', e.message); res.status(500).send('erreur: ' + esc(e.message)); }
+});
+
+router.post('/share/delete', form, async (req, res) => {
+  if (!authed(req, res)) return;
+  const site = SITES[req.body.site] ? req.body.site : null;
+  if (!site) return res.status(400).send('site inconnu');
+  try {
+    await ensureShareTable(site);
+    await q(site, 'DELETE FROM share_meta WHERE id = 1');
+    metaCache.delete(site);
+    console.log(`[share] fiche ${site} supprimee (retour automatique)`);
+    res.redirect(302, `${BASE_ABS}/share?ok=${encodeURIComponent(site + ' : lecture automatique retablie')}`);
+  } catch (e) { console.error('share-delete:', e.message); res.status(500).send('erreur: ' + esc(e.message)); }
 });
 
 router.get('/visits', async (req, res) => {
