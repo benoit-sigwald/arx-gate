@@ -362,9 +362,12 @@ router.get('/auth', async (req, res) => {
   let rd = siteUrl(site);
   if (site && uri && !uri.startsWith('/gate')) {
     if (uri.startsWith('/' + site)) {
-      rd = `${proto}://${host}${uri}`;
+      rd = `${proto}://${host}${uri}`;                       // hote partage : /<site>/page
     } else {
-      try { rd = new URL(siteUrl(site)).origin + uri; } catch {}
+      try {
+        const base = new URL(siteUrl(site));
+        if (base.pathname === '/') rd = base.origin + uri;   // hote dedie : /page
+      } catch {}
     }
   }
   if (!site) return res.sendStatus(200); // chemin non protégé
