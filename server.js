@@ -193,6 +193,14 @@ small{color:var(--muted);font-size:.76rem;display:block;margin-top:18px}
  color:var(--navy);border:1px solid var(--border);border-radius:8px;padding:4px 10px;background:#fff}
 .lang:hover{border-color:var(--gold);color:var(--gold)}
 .box{position:relative}
+#rgpd-modal{position:fixed;inset:0;background:rgba(27,53,77,.65);display:flex;align-items:center;
+ justify-content:center;padding:24px;z-index:50}
+#rgpd-modal[hidden]{display:none}
+#rgpd-modal .inner{background:#fff;border-radius:14px;padding:28px;max-width:420px;text-align:center;
+ box-shadow:0 20px 60px rgba(0,0,0,.3)}
+#rgpd-modal .row2{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+#rgpd-modal button{margin:0}
+#rgpd-cancel{background:#fff;color:var(--navy);border:1px solid var(--border)}
 </style></head><body><div class="box">${body}</div></body></html>`;
 
 const BASE_ABS = (process.env.BASE_PATH && process.env.BASE_PATH !== '/') ? process.env.BASE_PATH.replace(/\/$/, '') : '';
@@ -305,16 +313,14 @@ function formPage(site, rd, err, prefill = {}, l = 'fr') {
     </div>
     <button type="submit">${esc(t.submit)}</button>
   </form>
-  <div id="rgpd-modal" hidden style="position:fixed;inset:0;background:rgba(27,53,77,.65);display:flex;
-       align-items:center;justify-content:center;padding:24px;z-index:50">
-    <div style="background:#fff;border-radius:14px;padding:28px;max-width:420px;text-align:center;
-         box-shadow:0 20px 60px rgba(0,0,0,.3)">
+  <div id="rgpd-modal" hidden>
+    <div class="inner">
       <div style="font-size:2rem;margin-bottom:8px">&#128274;</div>
       <h1 style="font-size:1.15rem;margin-bottom:8px">${esc(t.rgpdTitle)}</h1>
       <p class="sub" style="margin-bottom:18px">${esc(t.rgpd)}</p>
-      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-        <button type="button" id="rgpd-accept" style="margin:0">${esc(t.rgpdAccept)}</button>
-        <button type="button" id="rgpd-cancel" style="margin:0;background:#fff;color:#1b354d;border:1px solid var(--border)">${esc(t.rgpdCancel)}</button>
+      <div class="row2">
+        <button type="button" id="rgpd-accept">${esc(t.rgpdAccept)}</button>
+        <button type="button" id="rgpd-cancel">${esc(t.rgpdCancel)}</button>
       </div>
     </div>
   </div>
@@ -322,6 +328,7 @@ function formPage(site, rd, err, prefill = {}, l = 'fr') {
   (function(){
     var f = document.querySelector('form'), c = document.getElementById('c'),
         m = document.getElementById('rgpd-modal');
+    m.hidden = true;
     f.addEventListener('submit', function(e){
       if (!c.checked) { e.preventDefault(); m.hidden = false; }
     });
