@@ -162,9 +162,20 @@ app.set('trust proxy', true);
 const router = express.Router();
 const form = express.urlencoded({ extended: false, limit: '16kb' });
 
-const PAGE = (title, body) => `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+const PAGE = (title, body, og) => `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
-<title>${esc(title)} — Arx Capital</title>
+<title>${esc(og ? og.title : title + ' — Arx Capital')}</title>
+${og ? `<meta name="description" content="${esc(og.desc)}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Arx Capital">
+<meta property="og:title" content="${esc(og.title)}">
+<meta property="og:description" content="${esc(og.desc)}">
+<meta property="og:image" content="${PUBLIC_URL}/p/${og.img}">
+<meta property="og:image:width" content="1200">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${esc(og.title)}">
+<meta name="twitter:description" content="${esc(og.desc)}">
+<meta name="twitter:image" content="${PUBLIC_URL}/p/${og.img}">` : ''}
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--navy:#1b354d;--gold:#ae8d57;--border:#e4e8ef;--muted:#5b6472}
@@ -204,6 +215,33 @@ small{color:var(--muted);font-size:.76rem;display:block;margin-top:18px}
 </style></head><body><div class="box">${body}</div></body></html>`;
 
 const BASE_ABS = (process.env.BASE_PATH && process.env.BASE_PATH !== '/') ? process.env.BASE_PATH.replace(/\/$/, '') : '';
+// ---------- metadonnees de partage par site (WhatsApp, LinkedIn, SMS...) ----------
+const META = {
+  '50': {
+    title: 'Innovat Property — Villa Rose, 50 Boulevard d\'Oxford, Cannes',
+    desc: "Villa Belle Epoque de 1880 reinventee par SAOTA — 1 000 m2 tres haut de gamme dans un parc de 2 600 m2, quartier Oxford, Cannes.",
+    img: 'preview-50.jpg',
+  },
+  '877': {
+    title: "Innovat Property — Villa d'exception, Super Cannes",
+    desc: "Villa contemporaine de prestige de 1 200 m2 signee SAOTA, au coeur du Triangle d'Or de Super Cannes.",
+    img: 'preview-877.jpg',
+  },
+  cactus: {
+    title: 'Innovat Property — Les Cactus, Super Cannes',
+    desc: "Deux villas reunies en un domaine ultra-luxe signe SAOTA — 1 300 m2 projetes, deux permis de construire obtenus, Triangle d'Or de Super Cannes.",
+    img: 'preview-cactus.jpg',
+  },
+  arxcapital: {
+    title: 'Arx Capital — Benoit Sigwald, adoption de l\'IA',
+    desc: "J'aide les equipes a travailler avec l'IA : utile, sure, mesurable. 30 ans de conduite du changement technologique.",
+    img: 'preview-arxcapital.png',
+  },
+};
+function meta(site) {
+  return META[site] || { title: 'Arx Capital', desc: 'Acces reserve.', img: 'preview-arxcapital.png' };
+}
+
 // ---------- traductions ----------
 const T = {
   fr: {
@@ -276,7 +314,7 @@ function waitingPage(site, vtoken) {
     }
     setTimeout(check, 4000);
   })();
-  </script>`);
+  </script>`, meta(site));
 }
 
 function langLink(l, extra = '') {
@@ -341,7 +379,7 @@ function formPage(site, rd, err, prefill = {}, l = 'fr') {
     m.addEventListener('click', function(e){ if (e.target === m) m.hidden = true; });
   })();
   </script>
-  <small>${esc(t.foot)}</small>`);
+  <small>${esc(t.foot)}</small>`, meta(site));
 }
 
 function waitingPage(site, vtoken, l = 'fr') {
@@ -364,7 +402,7 @@ function waitingPage(site, vtoken, l = 'fr') {
     }
     setTimeout(check, 4000);
   })();
-  </script>`);
+  </script>`, meta(site));
 }
 
 // ---- forwardauth ----
@@ -1050,6 +1088,7 @@ router.get('/export.csv', async (req, res) => {
   res.type('text/csv').set('Content-Disposition', `attachment; filename="prospects-${site}.csv"`).send(csv);
 });
 
+router.use('/p', express.static(path.join(__dirname, 'public'), { maxAge: '7d' }));
 router.get('/health', (req, res) => res.send('ok'));
 
 app.use('/', router);
