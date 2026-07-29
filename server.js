@@ -301,8 +301,12 @@ router.post('/register', form, async (req, res) => {
     if (existing.rows.length) {
       id = existing.rows[0].ID;
       if (existing.rows[0].STATUS === 'approved') {
-        return res.type('html').send(PAGE('Déjà inscrit', `<div class="ok">✅</div><h1>Vous avez déjà un accès</h1>
-          <p class="sub">Un lien d'accès vient d'être renvoyé à ${esc(email)}.</p>`));
+        // deja approuve : on rouvre l'acces immediatement, sans repasser par la validation
+        const t2 = tok();
+        await q(site, `INSERT INTO sessions (prospect_id, token, expires_at) VALUES (:id, :t, SYSTIMESTAMP + INTERVAL '90' DAY)`,
+          { id, t: t2 });
+        if (b.rd) await q(site, 'UPDATE prospects SET landing = :l WHERE id = :id', { l: cut(b.rd, 512), id });
+        return res.redirect(302, `${gateBase(site)}/access?t=${t2}&site=${encodeURIComponent(site)}`);
       }
       await q(site, `UPDATE prospects SET first_name=:f, last_name=:l, phone=:p, company=:c, interest=:i,
         verify_token=:v, decision_token=:d, status='pending' WHERE id=:id`,
