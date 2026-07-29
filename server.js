@@ -653,7 +653,7 @@ router.get('/admin', async (req, res) => {
       <td><span style="color:${badge(p.STATUS)};font-weight:600">${esc(p.STATUS)}</span></td>
       <td><b>${p.NB || 0}</b> visite(s)<br><span class="m">${p.NB ? 'derniere ' + fmt(p.LAST_SEEN) : '-'}</span></td>
       <td class="m">${esc(p.LAST_PAGE || '-')}<br><span class="m">${esc(p.BROWSER || '')} ${esc(p.DEVICE || '')}</span></td>
-      <td onclick="event.stopPropagation()">${p.LAT != null ? `<a href="https://maps.google.com/?q=${p.LAT},${p.LON}" target="_blank" rel="noopener" title="${esc(p.LAT + ', ' + p.LON)}">carte</a>` : '-'}</td></tr>`).join('');
+      <td>${p.LAT != null ? `<a href="${BASE_ABS}/prospect?site=${site}&id=${p.ID}#map" title="${esc(p.LAT + ', ' + p.LON)}">carte</a>` : '-'}</td></tr>`).join('');
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Prospects — ${esc(site)}</title><style>
@@ -994,7 +994,7 @@ ${req.query.ok ? `<p style="background:#e6f4ec;border:1px solid #b7e0c8;color:#1
   <div><span>Campagne</span><b>${esc([p.UTM_SOURCE, p.UTM_MEDIUM, p.UTM_CAMPAIGN].filter(Boolean).join(' / ') || '-')}</b></div>
 </div>
 
-${ll ? `<h2>Localisation approximative</h2><div class="card"><iframe loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+${ll ? `<h2 id="map">Localisation approximative</h2><div class="card"><iframe loading="lazy" referrerpolicy="no-referrer-when-downgrade"
   src="https://maps.google.com/maps?q=${ll.LAT},${ll.LON}&z=11&output=embed"></iframe></div>` : ''}
 
 <h2>Pages les plus consultees</h2>
