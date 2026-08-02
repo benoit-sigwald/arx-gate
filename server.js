@@ -775,7 +775,7 @@ th{text-align:left;padding:10px 12px;background:#f2f5f9;color:#1b354d;font-size:
 td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
 .m{color:#5b6472;font-size:.78rem}a{color:#ae8d57}
 </style></head><body><div class="w">
-<h1>Prospects</h1><p class="m"><a href="${BASE_ABS}/prospect/new?site=${site}"><b>+ Ajouter un prospect</b></a> &middot; <a href="${BASE_ABS}/visits?site=${site}"><b>Voir les visites (tracker) &rarr;</b></a> &middot; <a href="${BASE_ABS}/share"><b>Liens partages</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
+<h1>Prospects</h1><p class="m"><a href="${BASE_ABS}/prospect/new?site=${site}"><b>+ Ajouter un prospect</b></a> &middot; <a href="${BASE_ABS}/visits?site=${site}"><b>Voir les visites (tracker) &rarr;</b></a> &middot; <a href="${BASE_ABS}/share"><b>Liens partages</b></a> &middot; <a href="${BASE_ABS}/funnel"><b>Tunnel de conversion</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
 <div style="margin:14px 0">${tabs}</div>
 <div class="tiles">
   <div class="tile"><b>${s.TOTAL || 0}</b><span>prospects</span></div>
@@ -916,6 +916,76 @@ router.post('/prospect/create', form, async (req, res) => {
 });
 
 // ---- administration des liens partages ----
+// ---- tunnel de conversion (KPI) ----
+router.get('/funnel', async (req, res) => {
+  if (!authed(req, res)) return;
+  const days = Math.min(parseInt(req.query.days || '30', 10) || 30, 365);
+  try {
+    const rows = [];
+    for (const site of Object.keys(SITES)) {
+      const [vis, uniq, cta, pro, appr] = await Promise.all([
+        q(site, `SELECT COUNT(*) c FROM visits WHERE ts >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`, { d: days }),
+        q(site, `SELECT COUNT(DISTINCT ip) c FROM visits WHERE ts >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`, { d: days }),
+        q(site, `SELECT COUNT(*) c FROM visits WHERE page LIKE '/cta:%' AND ts >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`, { d: days }),
+        q(site, `SELECT COUNT(*) c FROM prospects WHERE created_at >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`, { d: days }),
+        q(site, `SELECT COUNT(*) c FROM prospects WHERE status = 'approved' AND created_at >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`, { d: days }),
+      ]);
+      rows.push({ site, vis: vis.rows[0].C, uniq: uniq.rows[0].C, cta: cta.rows[0].C,
+                  pro: pro.rows[0].C, appr: appr.rows[0].C });
+    }
+    const tot = rows.reduce((a, r) => ({
+      vis: a.vis + r.vis, uniq: a.uniq + r.uniq, cta: a.cta + r.cta, pro: a.pro + r.pro, appr: a.appr + r.appr,
+    }), { vis: 0, uniq: 0, cta: 0, pro: 0, appr: 0 });
+    const pct = (a, b) => b ? Math.round((a / b) * 100) + ' %' : '—';
+    const steps = [
+      ['Visiteurs uniques', tot.uniq, '—'],
+      ['Visites', tot.vis, '—'],
+      ['Clics sur « Réserver 30 minutes »', tot.cta, pct(tot.cta, tot.uniq)],
+      ['Prospects inscrits', tot.pro, pct(tot.pro, tot.uniq)],
+      ['Prospects approuvés', tot.appr, pct(tot.appr, tot.pro)],
+    ];
+    res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Tunnel de conversion</title><style>
+body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
+.w{max-width:900px;margin:0 auto}h1{font-size:1.4rem;color:#1b354d;margin:0 0 4px}
+.m{color:#5b6472;font-size:.85rem}a{color:#ae8d57;text-decoration:none}
+.step{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:16px 20px;margin-bottom:10px;
+ display:flex;align-items:center;justify-content:space-between;gap:16px}
+.step .bar{height:10px;background:#1b354d;border-radius:6px;flex:1;max-width:420px;opacity:.85}
+.step b{font-size:1.5rem;color:#1b354d;min-width:90px;text-align:right}
+.step .lbl{min-width:230px}
+.step .cv{color:#ae8d57;font-weight:600;min-width:70px;text-align:right}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e4e8ef;border-radius:12px;overflow:hidden;font-size:.85rem;margin-top:22px}
+th{text-align:left;padding:9px 12px;background:#f2f5f9;color:#1b354d;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}
+td{padding:9px 12px;border-top:1px solid #e4e8ef}
+.days a{margin-right:10px}
+</style></head><body><div class="w">
+<h1>Tunnel de conversion</h1>
+<p class="m"><a href="${BASE_ABS}/admin">prospects</a> &middot; <a href="${BASE_ABS}/visits">visites</a> &middot;
+<a href="${BASE_ABS}/share">liens partagés</a> &middot; derniers ${days} jours</p>
+<p class="m days">Période :
+  <a href="${BASE_ABS}/funnel?days=7">7 j</a>
+  <a href="${BASE_ABS}/funnel?days=30">30 j</a>
+  <a href="${BASE_ABS}/funnel?days=90">90 j</a>
+  <a href="${BASE_ABS}/funnel?days=365">1 an</a></p>
+
+${steps.map(([lbl, n, cv]) => `<div class="step">
+  <span class="lbl">${esc(lbl)}</span>
+  <span class="bar" style="max-width:${Math.max(4, Math.round((n / Math.max(1, steps[1][1])) * 420))}px"></span>
+  <b>${n}</b><span class="cv">${esc(cv)}</span>
+</div>`).join('')}
+
+<table><thead><tr><th>Site</th><th>Visiteurs uniques</th><th>Visites</th><th>Clics CTA</th><th>Inscrits</th><th>Approuvés</th></tr></thead>
+<tbody>${rows.map(r => `<tr><td><b>${esc(r.site)}</b></td><td>${r.uniq}</td><td>${r.vis}</td><td>${r.cta}</td><td>${r.pro}</td><td>${r.appr}</td></tr>`).join('')}</tbody></table>
+
+<p class="m" style="margin-top:18px">Les clics sur le bouton de réservation sont comptés via le tracker
+(page <code>/cta:calendly</code>). Les rendez-vous réellement tenus et les contrats signés ne sont pas
+mesurables automatiquement — à saisir dans les notes du prospect.</p>
+</div></body></html>`);
+  } catch (e) { console.error('funnel:', e); res.status(500).send('erreur: ' + esc(e.message)); }
+});
+
 router.get('/share', async (req, res) => {
   if (!authed(req, res)) return;
   try {
