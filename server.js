@@ -319,12 +319,21 @@ const SEC_COLORS = {
 function security(site, page, referrer) {
   const base = SECURITY[site] || { label: 'Inconnu', kind: 'key', detail: '' };
   const p = String(page || ''), r = String(referrer || '');
+  // un appel MCP reste protege par jeton, quel que soit le site sous lequel il a ete journalise
+  if (/^\/(mcp|t\/)|\/mcp(\/|$)/.test(p))
+    return { label: 'Jeton Bearer', kind: 'token', detail: 'Appel MCP : Authorization Bearer ou prefixe /t/<jeton>' };
   // les pages d administration sont protegees par la cle, quel que soit le site
   if (/^\/(gate\/)?(admin|visits|funnel|share|prospect)/.test(p))
     return { label: 'Cle admin', kind: 'key', detail: 'Back-office, cle ADMIN_KEY' };
   // le middleware MCP journalise le resultat dans le champ referrer
   if (/refus|denied|401|403/i.test(r)) return { label: base.label + ' - refuse', kind: 'denied', detail: base.detail };
   return base;
+}
+function secDot(site) {
+  const s = SECURITY[site];
+  if (!s) return '';
+  const [fg] = SEC_COLORS[s.kind] || SEC_COLORS.key;
+  return `<i class="dot" style="background:${fg}" title="${esc(s.label)}"></i>`;
 }
 function secBadge(site, page, referrer) {
   const s = security(site, page, referrer);
@@ -836,7 +845,7 @@ th{text-align:left;padding:10px 12px;background:#f2f5f9;color:#1b354d;font-size:
 td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
 .m{color:#5b6472;font-size:.78rem}a{color:#ae8d57}
 </style></head><body><div class="w">
-<h1>Prospects</h1><p class="m"><a href="${BASE_ABS}/prospect/new?site=${site}"><b>+ Ajouter un prospect</b></a> &middot; <a href="${BASE_ABS}/visits?site=${site}"><b>Voir les visites (tracker) &rarr;</b></a> &middot; <a href="${BASE_ABS}/share"><b>Liens partages</b></a> &middot; <a href="${BASE_ABS}/funnel"><b>Tunnel de conversion</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
+<h1>Prospects</h1><p class="m"><a href="${BASE_ABS}/prospect/new?site=${site}"><b>+ Ajouter un prospect</b></a> &middot; <a href="${BASE_ABS}/visits?site=${site}"><b>Voir les visites (tracker) &rarr;</b></a> &middot; <a href="${BASE_ABS}/share"><b>Liens partages</b></a> &middot; <a href="${BASE_ABS}/funnel"><b>Tunnel de conversion</b></a> &middot; <a href="${BASE_ABS}/threats"><b>Carte des menaces</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
 <div style="margin:14px 0">${tabs}</div>
 <div class="tiles">
   <div class="tile"><b>${s.TOTAL || 0}</b><span>prospects</span></div>
@@ -978,6 +987,131 @@ router.post('/prospect/create', form, async (req, res) => {
 
 // ---- administration des liens partages ----
 // ---- tunnel de conversion (KPI) ----
+// ---- carte des menaces : d'ou viennent les acces suspects ----
+// Signaux retenus (aucune supposition : uniquement ce qui est journalise)
+//  · scan     : chemins d'attaque connus (wp-admin, .env, phpmyadmin...)
+//  · refus    : requete rejetee (401/403 signale par le middleware MCP)
+//  · robot    : user-agent d'automate
+//  · volume   : plus de 60 requetes sur la periode depuis une meme IP
+//  · etranger : hors zone habituelle (France, Monaco, Suisse, Belgique)
+const ATTACK_PATHS = /(wp-admin|wp-login|xmlrpc|\.env|\.git|phpmyadmin|\/admin\.php|\/shell|\/etc\/passwd|\/config\.|\.aws|\/vendor\/|\/actuator|\/solr|\/cgi-bin)/i;
+const HOME_COUNTRIES = new Set(['France', 'Monaco', 'Switzerland', 'Suisse', 'Belgium', 'Belgique']);
+
+router.get('/threats', async (req, res) => {
+  if (!authed(req, res)) return;
+  const days = Math.min(parseInt(req.query.days || '30', 10) || 30, 365);
+  try {
+    const perIp = new Map();
+    for (const site of Object.keys(SITES)) {
+      let rows = [];
+      try {
+        rows = (await q(site, `SELECT ip, page, referrer, ua, city, country, org, isp, lat, lon, ts
+          FROM visits WHERE ts >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')
+          ORDER BY ts DESC FETCH FIRST 4000 ROWS ONLY`, { d: days })).rows;
+      } catch { continue; }
+      for (const v of rows) {
+        const ip = v.IP || 'inconnue';
+        if (!perIp.has(ip)) perIp.set(ip, {
+          ip, n: 0, sites: new Set(), scans: 0, denied: 0, bots: 0,
+          city: v.CITY, country: v.COUNTRY, org: v.ORG || v.ISP,
+          lat: v.LAT, lon: v.LON, last: v.TS, samples: [],
+        });
+        const e = perIp.get(ip);
+        e.n++;
+        e.sites.add(site);
+        if (e.lat == null && v.LAT != null) { e.lat = v.LAT; e.lon = v.LON; }
+        if (!e.city && v.CITY) { e.city = v.CITY; e.country = v.COUNTRY; e.org = v.ORG || v.ISP; }
+        if (ATTACK_PATHS.test(v.PAGE || '')) { e.scans++; if (e.samples.length < 3) e.samples.push(v.PAGE); }
+        if (/refus|denied|401|403/i.test(String(v.REFERRER || ''))) e.denied++;
+        if (/bot|crawler|spider|curl|wget|python|scan/i.test(String(v.UA || ''))) e.bots++;
+      }
+    }
+    const items = [...perIp.values()].map(e => {
+      const reasons = [];
+      let score = 0;
+      if (e.scans)   { score += 60 + Math.min(e.scans, 20); reasons.push(`${e.scans} chemin(s) d'attaque`); }
+      if (e.denied)  { score += 25 + Math.min(e.denied, 20); reasons.push(`${e.denied} refus`); }
+      if (e.bots)    { score += 10; reasons.push('automate'); }
+      if (e.n > 60)  { score += 15; reasons.push(`${e.n} requetes`); }
+      if (e.country && !HOME_COUNTRIES.has(e.country)) { score += 8; reasons.push(`hors zone (${e.country})`); }
+      const level = score >= 60 ? 'eleve' : score >= 25 ? 'moyen' : score > 0 ? 'faible' : 'aucun';
+      return { ...e, sites: [...e.sites], score, level, reasons };
+    }).filter(e => e.score > 0).sort((a, b) => b.score - a.score).slice(0, 60);
+
+    const counts = { eleve: 0, moyen: 0, faible: 0 };
+    items.forEach(i => counts[i.level]++);
+    const COL = { eleve: ['#a32d2d', '#fdecec', '#f5c2c2'], moyen: ['#8a6d3b', '#f4ede0', '#e6d9c2'], faible: ['#1b354d', '#eef1f6', '#dde5ee'] };
+    const fmt = t => t ? new Date(t).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
+    const mapped = items.filter(i => i.lat != null);
+    const first = mapped[0];
+
+    res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Carte des menaces</title><style>
+body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
+.w{max-width:1150px;margin:0 auto}h1{font-size:1.4rem;color:#1b354d;margin:0 0 4px}
+h2{font-size:.95rem;color:#1b354d;margin:0 0 12px}
+.m{color:#5b6472;font-size:.85rem}a{color:#ae8d57;text-decoration:none}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:18px 0}
+.tile{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:16px}
+.tile b{display:block;font-size:1.7rem}.tile span{color:#5b6472;font-size:.8rem}
+.card{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:18px;margin-bottom:20px}
+iframe{width:100%;height:360px;border:0;border-radius:10px}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e4e8ef;border-radius:12px;overflow:hidden;font-size:.84rem}
+th{text-align:left;padding:9px 12px;background:#f2f5f9;color:#1b354d;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em}
+td{padding:9px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
+.lvl{font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:6px;border:1px solid;white-space:nowrap}
+a.pin{text-decoration:none;font-size:1rem}
+code{background:#f2f5f9;padding:1px 5px;border-radius:4px;font-size:.78rem}
+</style></head><body><div class="w">
+<h1>Carte des menaces</h1>
+<p class="m"><a href="${BASE_ABS}/visits">visites</a> &middot; <a href="${BASE_ABS}/admin">prospects</a> &middot;
+<a href="${BASE_ABS}/funnel">tunnel</a> &middot; ${days} derniers jours &middot;
+<a href="${BASE_ABS}/threats?days=7">7 j</a> · <a href="${BASE_ABS}/threats?days=30">30 j</a> · <a href="${BASE_ABS}/threats?days=90">90 j</a></p>
+
+<div class="tiles">
+  <div class="tile"><b style="color:#a32d2d">${counts.eleve}</b><span>IP a risque eleve</span></div>
+  <div class="tile"><b style="color:#8a6d3b">${counts.moyen}</b><span>a surveiller</span></div>
+  <div class="tile"><b style="color:#1b354d">${counts.faible}</b><span>signaux faibles</span></div>
+  <div class="tile"><b>${mapped.length}</b><span>localisees sur la carte</span></div>
+</div>
+
+<div class="card">
+  <h2>Origine geographique — <span id="maplabel">${first ? esc((first.city || '') + ', ' + (first.country || '') + ' - ' + first.ip) : 'aucune menace localisee'}</span></h2>
+  <iframe id="gmap" title="Carte" loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+    src="${first ? `https://maps.google.com/maps?q=${first.lat},${first.lon}&z=5&output=embed` : 'about:blank'}"></iframe>
+  <p class="m" style="margin-top:8px">Position approximative de l'IP (precision : ville). Cliquez un &#128205; pour situer une origine.</p>
+</div>
+
+<table><thead><tr><th></th><th>Niveau</th><th>Origine</th><th>Organisation</th><th>Signaux</th><th>Requetes</th><th>Derniere</th><th>IP</th></tr></thead>
+<tbody>${items.map(i => {
+  const [fg, bg, bd] = COL[i.level] || COL.faible;
+  return `<tr>
+  <td>${i.lat != null ? `<a href="#" class="pin" data-ll="${i.lat},${i.lon}" data-label="${esc((i.city || '') + ' ' + (i.country || '') + ' - ' + i.ip)}">&#128205;</a>` : ''}</td>
+  <td><span class="lvl" style="color:${fg};background:${bg};border-color:${bd}">${i.level}</span></td>
+  <td>${esc(i.city || '?')}${i.city ? ', ' : ''}${esc(i.country || '?')}</td>
+  <td class="m">${esc(i.org || '-')}</td>
+  <td>${esc(i.reasons.join(' · '))}${i.samples.length ? `<br><code>${esc(i.samples.join(' '))}</code>` : ''}</td>
+  <td>${i.n}<br><span class="m">${esc(i.sites.join(', '))}</span></td>
+  <td class="m">${fmt(i.last)}</td>
+  <td class="m">${esc(i.ip)}</td></tr>`;
+}).join('') || '<tr><td colspan="8">Aucun signal suspect sur la periode : bonne nouvelle.</td></tr>'}</tbody></table>
+
+<p class="m" style="margin-top:16px">Lecture : le score combine les chemins d'attaque connus, les requetes refusees,
+les automates, le volume et l'origine geographique. Une IP « hors zone » n'est pas suspecte en soi —
+elle ne le devient qu'associee a un autre signal.</p>
+
+<script>
+document.addEventListener('click', function(e){
+  var a = e.target.closest('a.pin'); if(!a) return; e.preventDefault();
+  document.getElementById('gmap').src = 'https://maps.google.com/maps?q=' + a.getAttribute('data-ll') + '&z=8&output=embed';
+  document.getElementById('maplabel').textContent = a.getAttribute('data-label');
+});
+</script>
+</div></body></html>`);
+  } catch (e) { console.error('threats:', e); res.status(500).send('erreur: ' + esc(e.message)); }
+});
+
 router.get('/funnel', async (req, res) => {
   if (!authed(req, res)) return;
   const days = Math.min(parseInt(req.query.days || '30', 10) || 30, 365);
@@ -1163,9 +1297,20 @@ router.get('/visits', async (req, res) => {
     const fmt = t => t ? new Date(t).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
     const first = last.rows.find(v => v.LAT != null);
     const li = (arr, k) => arr.map(r => `<li><span>${esc(r[k] || '-')}</span><b>${r.C}</b></li>`).join('');
-    const tabs = Object.keys(SITES).map(x =>
-      `<a href="${BASE_ABS}/visits?site=${x}" style="padding:6px 14px;border:1px solid #e4e8ef;border-radius:8px;text-decoration:none;
-        color:${x === site ? '#fff' : '#1b354d'};background:${x === site ? '#1b354d' : '#fff'};font-size:.85rem">${esc(x)}</a>`).join(' ');
+    // onglets groupes par famille, sur plusieurs lignes
+    const FAMILIES = [
+      ['Sites vitrine', ['arxcapital', 'chef-jason', 'mcp-root']],
+      ['Dossiers prives', ['50', '877', 'cactus']],
+      ['Applications', ['blackstone', 'candidatures', 'prospects', 'gate']],
+      ['Serveurs MCP & API', ['mcp-einstein', 'mcp-prisme', 'mcp-immo-rapido', 'data-api']],
+    ];
+    const known = new Set(FAMILIES.flatMap(f => f[1]));
+    const others = Object.keys(SITES).filter(x => !known.has(x));
+    if (others.length) FAMILIES.push(['Autres', others]);
+    const tab = x => `<a href="${BASE_ABS}/visits?site=${x}" class="tab${x === site ? ' on' : ''}">${esc(x)}${secDot(x)}</a>`;
+    const tabs = FAMILIES.filter(([, list]) => list.some(x => SITES[x]))
+      .map(([name, list]) => `<div class="tabrow"><span class="tabfam">${esc(name)}</span>${
+        list.filter(x => SITES[x]).map(tab).join('')}</div>`).join('');
     const rows = last.rows.map(v => `<tr>
       <td>${v.LAT != null ? `<a href="#map" class="pin" data-ll="${v.LAT},${v.LON}" data-label="${esc((v.CITY || '') + ' ' + (v.COUNTRY || '') + ' - ' + v.IP)}">&#128205;</a>` : ''}</td>
       <td>${fmt(v.TS)}</td>
@@ -1197,11 +1342,22 @@ th{text-align:left;padding:9px 10px;background:#f2f5f9;color:#1b354d;font-size:.
 td{padding:8px 10px;border-top:1px solid #e4e8ef;vertical-align:top;max-width:220px;overflow:hidden;text-overflow:ellipsis}
 .m{color:#5b6472;font-size:.78rem}a{color:#ae8d57;text-decoration:none}a.pin{font-size:1rem}
 .sec{display:inline-block;font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:6px;border:1px solid;white-space:nowrap}
+.tabrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.tabfam{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:#8a8f98;min-width:150px}
+.tab{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border:1px solid #e4e8ef;border-radius:8px;
+ text-decoration:none;color:#1b354d;background:#fff;font-size:.85rem}
+.tab.on{background:#1b354d;color:#fff;border-color:#1b354d}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.threat{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:18px;margin-bottom:20px}
+.threat h2{margin-bottom:12px}
+.trow{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid #e4e8ef;font-size:.85rem}
+.trow:first-of-type{border-top:0}
+.lvl{font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:6px;border:1px solid;white-space:nowrap}
 iframe{width:100%;height:320px;border:0;border-radius:10px}
 .nav a{margin-right:10px}
 </style></head><body><div class="w">
 <h1>Visites</h1>
-<p class="m nav"><a href="${BASE_ABS}/admin?site=${site}">&larr; prospects</a> &middot; schema Oracle dedie par site
+<p class="m nav"><a href="${BASE_ABS}/admin?site=${site}">&larr; prospects</a> &middot; <a href="${BASE_ABS}/threats">carte des menaces</a> &middot; schema Oracle dedie par site
 &middot; protection de ce site : ${secBadge(site, '', '')} <span class="m">${esc((SECURITY[site] || {}).detail || '')}</span></p>
 <div style="margin:14px 0">${tabs}</div>
 <div class="tiles">
