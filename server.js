@@ -156,8 +156,8 @@ function openLink(site, style = '') {
 // ---------- barre de menu du back-office ----------
 // Une seule definition des sections : titre, chemin et ce que la page montre.
 const MENU = [
-  ['admin',   'Prospects', 'Fiches, parcours et statut de chaque inscrit'],
   ['tracker', 'Tracker',   'Visites, pages vues, provenance et carte'],
+  ['admin',   'Prospects', 'Fiches, parcours et statut de chaque inscrit'],
   ['funnel',  'Tunnel',    'Visiteurs uniques, clics CTA, inscrits, approuves'],
   ['threats', 'Menaces',   'IP suspectes, scans de vulnerabilites, robots'],
   ['share',   'Partages',  'Titre, description et image des liens partages'],
@@ -169,8 +169,10 @@ function navBar(current, { site = '', key = '' } = {}) {
     if (key) p.push('key=' + encodeURIComponent(key));
     return p.length ? '?' + p.join('&') : '';
   };
+  // « tracker » est la racine du back-office : /tracker, pas /tracker/tracker
+  const href = (path) => `${ADMIN_ABS}${path === 'tracker' ? '' : '/' + path}${qs(path)}`;
   const links = MENU.map(([path, label, detail]) =>
-    `<a href="${BASE_ABS}/${path}${qs(path)}" title="${esc(detail)}"
+    `<a href="${href(path)}" title="${esc(detail)}"
        class="gnav-l${path === current ? ' on' : ''}">${esc(label)}</a>`).join('');
   const detail = (MENU.find(m => m[0] === current) || [, , ''])[2];
   return `<style>
@@ -272,6 +274,9 @@ small{color:var(--muted);font-size:.76rem;display:block;margin-top:18px}
 </style></head><body><div class="box">${body}</div></body></html>`;
 
 const BASE_ABS = (process.env.BASE_PATH && process.env.BASE_PATH !== '/') ? process.env.BASE_PATH.replace(/\/$/, '') : '';
+// La porte publique reste sous BASE_PATH (/gate) ; le back-office est servi sous ADMIN_ABS
+// (/tracker), sans reecriture de prefixe cote Traefik pour que les liens restent valides.
+const ADMIN_ABS = (process.env.ADMIN_BASE_PATH || '/tracker').replace(/\/$/, '');
 // ---------- metadonnees de partage, lues automatiquement sur le site protege ----------
 // Toute nouvelle porte herite du comportement : la porte va chercher <title>,
 // la description et l'image du site lui-meme, sans configuration.
@@ -885,9 +890,9 @@ router.get('/admin', async (req, res) => {
     const tabs = Object.keys(SITES).map(x =>
       `<span style="display:inline-flex;align-items:center;gap:5px;margin:0 6px 6px 0;padding:5px 10px;border:1px solid #e4e8ef;border-radius:8px;
         background:${x === site ? '#1b354d' : '#fff'};font-size:.85rem">
-        <a href="${BASE_ABS}/admin?site=${x}" style="text-decoration:none;color:${x === site ? '#fff' : '#1b354d'}">${esc(x)}</a>
+        <a href="${ADMIN_ABS}/admin?site=${x}" style="text-decoration:none;color:${x === site ? '#fff' : '#1b354d'}">${esc(x)}</a>
         ${openLink(x, `color:${x === site ? '#fff' : '#ae8d57'}`)}</span>`).join('');
-    const rows = pros.rows.map(p => `<tr onclick="location.href='${BASE_ABS}/prospect?site=${site}&id=${p.ID}'" style="cursor:pointer">
+    const rows = pros.rows.map(p => `<tr onclick="location.href='${ADMIN_ABS}/prospect?site=${site}&id=${p.ID}'" style="cursor:pointer">
       <td>${fmt(p.CREATED_AT)}</td>
       <td><b>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)}</b><br><span class="m">${esc(p.COMPANY || '')}</span></td>
       <td>${esc(p.EMAIL)}<br><span class="m">${esc(p.PHONE || '')}</span></td>
@@ -896,7 +901,7 @@ router.get('/admin', async (req, res) => {
       <td><span style="color:${badge(p.STATUS)};font-weight:600">${esc(p.STATUS)}</span></td>
       <td><b>${p.NB || 0}</b> visite(s)<br><span class="m">${p.NB ? 'derniere ' + fmt(p.LAST_SEEN) : '-'}</span></td>
       <td class="m">${esc(p.LAST_PAGE || '-')}<br><span class="m">${esc(p.BROWSER || '')} ${esc(p.DEVICE || '')}</span></td>
-      <td>${p.LAT != null ? `<a href="${BASE_ABS}/prospect?site=${site}&id=${p.ID}#map" title="${esc(p.LAT + ', ' + p.LON)}">carte</a>` : '-'}</td></tr>`).join('');
+      <td>${p.LAT != null ? `<a href="${ADMIN_ABS}/prospect?site=${site}&id=${p.ID}#map" title="${esc(p.LAT + ', ' + p.LON)}">carte</a>` : '-'}</td></tr>`).join('');
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Prospects — ${esc(site)}</title><style>
@@ -911,7 +916,7 @@ td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
 .m{color:#5b6472;font-size:.78rem}a{color:#ae8d57}
 </style></head><body><div class="w">
 ${navBar('admin', { site, key: req.query.key })}
-<h1>Prospects</h1><p class="m"><a href="${BASE_ABS}/prospect/new?site=${site}"><b>+ Ajouter un prospect</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
+<h1>Prospects</h1><p class="m"><a href="${ADMIN_ABS}/prospect/new?site=${site}"><b>+ Ajouter un prospect</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${ADMIN_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
 <div style="margin:14px 0">${tabs}</div>
 <div class="tiles">
   <div class="tile"><b>${s.TOTAL || 0}</b><span>prospects</span></div>
@@ -929,7 +934,7 @@ ${navBar('admin', { site, key: req.query.key })}
 
 // ---- modification / suppression d'un prospect ----
 function adminBack(res, site, id, msg) {
-  res.redirect(302, `${BASE_ABS}/prospect?site=${encodeURIComponent(site)}&id=${id}&ok=${encodeURIComponent(msg)}`);
+  res.redirect(302, `${ADMIN_ABS}/prospect?site=${encodeURIComponent(site)}&id=${id}&ok=${encodeURIComponent(msg)}`);
 }
 
 router.post('/prospect/save', form, async (req, res) => {
@@ -994,7 +999,7 @@ router.post('/prospect/delete', form, async (req, res) => {
     await q(site, 'DELETE FROM access_log WHERE prospect_id = :id', { id });
     await q(site, 'DELETE FROM prospects WHERE id = :id', { id });
     console.log(`[admin] prospect ${id} (${site}) supprime`);
-    res.redirect(302, `${BASE_ABS}/admin?site=${encodeURIComponent(site)}`);
+    res.redirect(302, `${ADMIN_ABS}/admin?site=${encodeURIComponent(site)}`);
   } catch (e) { console.error('delete:', e.message); res.status(500).send('erreur: ' + esc(e.message)); }
 });
 
@@ -1014,9 +1019,9 @@ input:focus,select:focus{outline:none;border-color:#ae8d57}
 button{margin-top:18px;padding:11px 20px;border:none;border-radius:9px;background:#1b354d;color:#fff;font:inherit;font-weight:600;cursor:pointer}
 a{color:#ae8d57}
 </style></head><body><div class="w">
-<p><a href="${BASE_ABS}/admin?site=${site}">&larr; retour aux prospects</a></p>
+<p><a href="${ADMIN_ABS}/admin?site=${site}">&larr; retour aux prospects</a></p>
 <h1>Ajouter un prospect (${esc(site)})</h1>
-<form class="card" method="post" action="${BASE_ABS}/prospect/create">
+<form class="card" method="post" action="${ADMIN_ABS}/prospect/create">
   <input type="hidden" name="site" value="${esc(site)}">
   <label>Prenom</label><input name="first_name" required maxlength="80">
   <label>Nom</label><input name="last_name" required maxlength="80">
@@ -1133,7 +1138,7 @@ code{background:#f2f5f9;padding:1px 5px;border-radius:4px;font-size:.78rem}
 ${navBar('threats', { key: req.query.key })}
 <h1>Carte des menaces</h1>
 <p class="m">${days} derniers jours &middot;
-<a href="${BASE_ABS}/threats?days=7">7 j</a> · <a href="${BASE_ABS}/threats?days=30">30 j</a> · <a href="${BASE_ABS}/threats?days=90">90 j</a></p>
+<a href="${ADMIN_ABS}/threats?days=7">7 j</a> · <a href="${ADMIN_ABS}/threats?days=30">30 j</a> · <a href="${ADMIN_ABS}/threats?days=90">90 j</a></p>
 
 <div class="tiles">
   <div class="tile"><b style="color:#a32d2d">${counts.eleve}</b><span>IP a risque eleve</span></div>
@@ -1230,10 +1235,10 @@ ${navBar('funnel', { key: req.query.key })}
 <h1>Tunnel de conversion</h1>
 <p class="m">derniers ${days} jours</p>
 <p class="m days">Période :
-  <a href="${BASE_ABS}/funnel?days=7">7 j</a>
-  <a href="${BASE_ABS}/funnel?days=30">30 j</a>
-  <a href="${BASE_ABS}/funnel?days=90">90 j</a>
-  <a href="${BASE_ABS}/funnel?days=365">1 an</a></p>
+  <a href="${ADMIN_ABS}/funnel?days=7">7 j</a>
+  <a href="${ADMIN_ABS}/funnel?days=30">30 j</a>
+  <a href="${ADMIN_ABS}/funnel?days=90">90 j</a>
+  <a href="${ADMIN_ABS}/funnel?days=365">1 an</a></p>
 
 ${steps.map(([lbl, n, cv]) => `<div class="step">
   <span class="lbl">${esc(lbl)}</span>
@@ -1261,7 +1266,7 @@ router.get('/share', async (req, res) => {
       const m = db && (db.title || db.desc || db.img) ? db : auto;
       const src = db && (db.title || db.desc || db.img) ? 'enregistre en base' : 'lu automatiquement sur le site';
       cards.push(`
-      <form class="card" method="post" action="${BASE_ABS}/share/save">
+      <form class="card" method="post" action="${ADMIN_ABS}/share/save">
         <input type="hidden" name="site" value="${esc(site)}">
         <div class="head">
           <h2>${esc(site)}</h2>
@@ -1280,7 +1285,7 @@ router.get('/share', async (req, res) => {
         </div>
         <div class="row">
           <button type="submit">Enregistrer</button>
-          <button type="submit" formaction="${BASE_ABS}/share/delete" class="alt"
+          <button type="submit" formaction="${ADMIN_ABS}/share/delete" class="alt"
             onclick="return confirm('Revenir a la lecture automatique pour ${esc(site)} ?')">Supprimer la fiche</button>
           <a class="lnk" href="${siteUrl(site)}" target="_blank" rel="noopener">${esc(siteUrl(site))}</a>
         </div>
@@ -1331,7 +1336,7 @@ router.post('/share/save', form, async (req, res) => {
       t2: cut(req.body.title, 300), d2: cut(req.body.descr, 600), i2: cut(req.body.img, 600) });
     metaCache.delete(site);
     console.log(`[share] fiche ${site} enregistree`);
-    res.redirect(302, `${BASE_ABS}/share?ok=${encodeURIComponent('Fiche ' + site + ' enregistree')}`);
+    res.redirect(302, `${ADMIN_ABS}/share?ok=${encodeURIComponent('Fiche ' + site + ' enregistree')}`);
   } catch (e) { console.error('share-save:', e.message); res.status(500).send('erreur: ' + esc(e.message)); }
 });
 
@@ -1344,16 +1349,17 @@ router.post('/share/delete', form, async (req, res) => {
     await q(site, 'DELETE FROM share_meta WHERE id = 1');
     metaCache.delete(site);
     console.log(`[share] fiche ${site} supprimee (retour automatique)`);
-    res.redirect(302, `${BASE_ABS}/share?ok=${encodeURIComponent(site + ' : lecture automatique retablie')}`);
+    res.redirect(302, `${ADMIN_ABS}/share?ok=${encodeURIComponent(site + ' : lecture automatique retablie')}`);
   } catch (e) { console.error('share-delete:', e.message); res.status(500).send('erreur: ' + esc(e.message)); }
 });
 
 // ancien chemin, garde pour les liens deja partages
 router.get('/visits', (req, res) => {
   const qs = req.originalUrl.split('?')[1];
-  res.redirect(301, `${BASE_ABS}/tracker${qs ? '?' + qs : ''}`);
+  res.redirect(301, `${ADMIN_ABS}${qs ? '?' + qs : ''}`);
 });
-router.get('/tracker', async (req, res) => {
+// racine du back-office : montee a la fois sur /tracker (via app.get) et sur /<base>/tracker
+const trackerPage = async (req, res) => {
   if (!authed(req, res)) return;
   const site = SITES[req.query.site] ? req.query.site : Object.keys(SITES)[0];
   try {
@@ -1384,14 +1390,14 @@ router.get('/tracker', async (req, res) => {
     const known = new Set(FAMILIES.flatMap(f => f[1]));
     const others = Object.keys(SITES).filter(x => !known.has(x));
     if (others.length) FAMILIES.push(['Autres', others]);
-    const tab = x => `<span class="tabwrap"><a href="${BASE_ABS}/tracker?site=${x}" class="tab${x === site ? ' on' : ''}">${esc(x)}${secDot(x)}</a>${openLink(x)}</span>`;
+    const tab = x => `<span class="tabwrap"><a href="${ADMIN_ABS}/tracker?site=${x}" class="tab${x === site ? ' on' : ''}">${esc(x)}${secDot(x)}</a>${openLink(x)}</span>`;
     const tabs = FAMILIES.filter(([, list]) => list.some(x => SITES[x]))
       .map(([name, list]) => `<div class="tabrow"><span class="tabfam">${esc(name)}</span>${
         list.filter(x => SITES[x]).map(tab).join('')}</div>`).join('');
     const rows = last.rows.map(v => `<tr>
       <td>${v.LAT != null ? `<a href="#map" class="pin" data-ll="${v.LAT},${v.LON}" data-label="${esc((v.CITY || '') + ' ' + (v.COUNTRY || '') + ' - ' + v.IP)}">&#128205;</a>` : ''}</td>
       <td>${fmt(v.TS)}</td>
-      <td>${v.PROSPECT_ID ? `<a href="${BASE_ABS}/prospect?site=${site}&id=${v.PROSPECT_ID}"><b>${esc(v.FIRST_NAME || '')} ${esc(v.LAST_NAME || '')}</b><br><span class="m">${esc(v.COMPANY || '')}</span></a>` : '<span class="m">anonyme</span>'}</td>
+      <td>${v.PROSPECT_ID ? `<a href="${ADMIN_ABS}/prospect?site=${site}&id=${v.PROSPECT_ID}"><b>${esc(v.FIRST_NAME || '')} ${esc(v.LAST_NAME || '')}</b><br><span class="m">${esc(v.COMPANY || '')}</span></a>` : '<span class="m">anonyme</span>'}</td>
       <td>${esc(v.PAGE || '')}</td>
       <td>${esc(v.CITY || '')}${v.CITY ? ', ' : ''}${esc(v.COUNTRY || '')}</td>
       <td class="m">${esc(v.ORG || v.ISP || '')}</td>
@@ -1465,8 +1471,9 @@ document.addEventListener('click', function(e){
 });
 </script>
 </div></body></html>`);
-  } catch (e) { console.error('visits:', e); res.status(500).send('erreur: ' + esc(e.message)); }
-});
+  } catch (e) { console.error('tracker:', e); res.status(500).send('erreur: ' + esc(e.message)); }
+};
+router.get('/tracker', trackerPage);
 
 router.get('/prospect', async (req, res) => {
   if (!authed(req, res)) return;
@@ -1511,13 +1518,13 @@ iframe{width:100%;height:280px;border:0;border-radius:10px}
 .actions button.alt:hover{border-color:#ae8d57;color:#ae8d57}
 .actions button.danger{background:#a32d2d}.actions button.danger:hover{background:#c23c3c}
 </style></head><body><div class="w">
-<p><a href="${BASE_ABS}/admin?site=${site}">&larr; retour aux prospects (${esc(site)})</a></p>
+<p><a href="${ADMIN_ABS}/admin?site=${site}">&larr; retour aux prospects (${esc(site)})</a></p>
 <h1>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)}</h1>
 <p class="m">${esc(p.COMPANY || '')} &middot; ${esc(p.INTEREST || '')} &middot; statut <b>${esc(p.STATUS)}</b></p>
 ${req.query.ok ? `<p style="background:#e6f4ec;border:1px solid #b7e0c8;color:#1d7a4f;padding:10px 14px;border-radius:9px">${esc(req.query.ok)}</p>` : ''}
 
 <h2>Modifier la fiche</h2>
-<form class="card" method="post" action="${BASE_ABS}/prospect/save">
+<form class="card" method="post" action="${ADMIN_ABS}/prospect/save">
   <input type="hidden" name="site" value="${esc(site)}"><input type="hidden" name="id" value="${p.ID}">
   <div class="kv">
     <div><span>Prenom</span><input name="first_name" value="${esc(p.FIRST_NAME || '')}" maxlength="80"></div>
@@ -1533,9 +1540,9 @@ ${req.query.ok ? `<p style="background:#e6f4ec;border:1px solid #b7e0c8;color:#1
   </div>
   <div class="actions">
     <button type="submit">Enregistrer</button>
-    <button type="submit" formaction="${BASE_ABS}/prospect/access" class="alt">Renvoyer un lien d'acces</button>
-    <button type="submit" formaction="${BASE_ABS}/prospect/revoke" class="alt">Revoquer les acces</button>
-    <button type="submit" formaction="${BASE_ABS}/prospect/delete" class="danger"
+    <button type="submit" formaction="${ADMIN_ABS}/prospect/access" class="alt">Renvoyer un lien d'acces</button>
+    <button type="submit" formaction="${ADMIN_ABS}/prospect/revoke" class="alt">Revoquer les acces</button>
+    <button type="submit" formaction="${ADMIN_ABS}/prospect/delete" class="danger"
       onclick="return confirm('Supprimer definitivement ce prospect, ses sessions et ses visites liees ?')">Supprimer</button>
   </div>
 </form>
@@ -1626,7 +1633,12 @@ router.get('/health', (req, res) => res.send('ok'));
 app.use('/', router);
 const BASE = process.env.BASE_PATH;
 if (BASE && BASE !== '/') app.use(BASE, router);
+// back-office : /tracker rend la page tracker, /tracker/<section> le reste du menu
+if (ADMIN_ABS) {
+  app.get(ADMIN_ABS, trackerPage);
+  app.use(ADMIN_ABS, router);
+}
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => console.log(
-  `arx-gate :${PORT} base «${BASE || '/'}» · sites: ${Object.keys(SITES).join(', ')} · email ${EMAIL_ON ? 'ON' : 'OFF'} · ntfy ${NTFY_URL ? 'ON' : 'OFF'}`));
+  `arx-gate :${PORT} base «${BASE || '/'}» · back-office «${ADMIN_ABS}» · sites: ${Object.keys(SITES).join(', ')} · email ${EMAIL_ON ? 'ON' : 'OFF'} · ntfy ${NTFY_URL ? 'ON' : 'OFF'}`));
