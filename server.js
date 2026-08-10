@@ -290,6 +290,48 @@ async function siteMeta(site) {
   metaCache.set(site, m);
   return m;
 }
+// ---------- niveau de securite par site / page ----------
+// Ce qui protege reellement la ressource visitee : sert a lire le tracker
+// sans avoir a se souvenir de la configuration de chaque application.
+const SECURITY = {
+  arxcapital:        { label: 'Public',            kind: 'public',  detail: 'Site vitrine, ouvert a tous' },
+  'chef-jason':      { label: 'Public',            kind: 'public',  detail: 'Application web ouverte' },
+  'mcp-root':        { label: 'Public',            kind: 'public',  detail: 'Page racine du domaine MCP' },
+  gate:              { label: 'Public',            kind: 'public',  detail: 'Formulaire de demande d acces' },
+  '50':              { label: 'Porte prospects',   kind: 'gate',    detail: 'forwardAuth + cookie signe 90 j, validation manuelle' },
+  '877':             { label: 'Porte prospects',   kind: 'gate',    detail: 'forwardAuth + cookie signe 90 j, validation manuelle' },
+  cactus:            { label: 'Porte prospects',   kind: 'gate',    detail: 'forwardAuth + cookie signe 90 j, validation manuelle' },
+  blackstone:        { label: 'Cle admin',         kind: 'key',     detail: 'Tableau de bord interne, cle de session' },
+  candidatures:      { label: 'Cle admin',         kind: 'key',     detail: 'Tableau de bord interne, cle de session' },
+  prospects:         { label: 'Cle admin',         kind: 'key',     detail: 'DASH_TOKEN' },
+  'mcp-einstein':    { label: 'Jeton Bearer',      kind: 'token',   detail: 'Authorization: Bearer, ou prefixe /t/<jeton>' },
+  'mcp-prisme':      { label: 'Jeton Bearer',      kind: 'token',   detail: 'Authorization: Bearer, ou prefixe /t/<jeton>' },
+  'mcp-immo-rapido': { label: 'Jeton Bearer',      kind: 'token',   detail: 'Authorization: Bearer + portail web protege' },
+  'data-api':        { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST, cle de service' },
+};
+const SEC_COLORS = {
+  public:  ['#1d7a4f', '#e6f4ec', '#b7e0c8'],
+  gate:    ['#8a6d3b', '#f4ede0', '#e6d9c2'],
+  key:     ['#1b354d', '#eef1f6', '#dde5ee'],
+  token:   ['#5b3fa0', '#efeafa', '#ddd2f3'],
+  denied:  ['#a32d2d', '#fdecec', '#f5c2c2'],
+};
+function security(site, page, referrer) {
+  const base = SECURITY[site] || { label: 'Inconnu', kind: 'key', detail: '' };
+  const p = String(page || ''), r = String(referrer || '');
+  // les pages d administration sont protegees par la cle, quel que soit le site
+  if (/^\/(gate\/)?(admin|visits|funnel|share|prospect)/.test(p))
+    return { label: 'Cle admin', kind: 'key', detail: 'Back-office, cle ADMIN_KEY' };
+  // le middleware MCP journalise le resultat dans le champ referrer
+  if (/refus|denied|401|403/i.test(r)) return { label: base.label + ' - refuse', kind: 'denied', detail: base.detail };
+  return base;
+}
+function secBadge(site, page, referrer) {
+  const s = security(site, page, referrer);
+  const [fg, bg, bd] = SEC_COLORS[s.kind] || SEC_COLORS.key;
+  return `<span class="sec" title="${esc(s.detail)}" style="color:${fg};background:${bg};border-color:${bd}">${esc(s.label)}</span>`;
+}
+
 // ---------- traductions ----------
 const T = {
   fr: {
@@ -1132,6 +1174,7 @@ router.get('/visits', async (req, res) => {
       <td>${esc(v.CITY || '')}${v.CITY ? ', ' : ''}${esc(v.COUNTRY || '')}</td>
       <td class="m">${esc(v.ORG || v.ISP || '')}</td>
       <td class="m">${esc(v.BROWSER || '')} &middot; ${esc(v.OS || '')} &middot; ${esc(v.DEVICE || '')}</td>
+      <td>${secBadge(site, v.PAGE, v.REFERRER)}</td>
       <td class="m">${esc(v.REFERRER || '-')}</td>
       <td class="m">${esc(v.IP || '')}</td></tr>`).join('');
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
@@ -1153,11 +1196,13 @@ table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e4e8
 th{text-align:left;padding:9px 10px;background:#f2f5f9;color:#1b354d;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em}
 td{padding:8px 10px;border-top:1px solid #e4e8ef;vertical-align:top;max-width:220px;overflow:hidden;text-overflow:ellipsis}
 .m{color:#5b6472;font-size:.78rem}a{color:#ae8d57;text-decoration:none}a.pin{font-size:1rem}
+.sec{display:inline-block;font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:6px;border:1px solid;white-space:nowrap}
 iframe{width:100%;height:320px;border:0;border-radius:10px}
 .nav a{margin-right:10px}
 </style></head><body><div class="w">
 <h1>Visites</h1>
-<p class="m nav"><a href="${BASE_ABS}/admin?site=${site}">&larr; prospects</a> &middot; schema Oracle dedie par site</p>
+<p class="m nav"><a href="${BASE_ABS}/admin?site=${site}">&larr; prospects</a> &middot; schema Oracle dedie par site
+&middot; protection de ce site : ${secBadge(site, '', '')} <span class="m">${esc((SECURITY[site] || {}).detail || '')}</span></p>
 <div style="margin:14px 0">${tabs}</div>
 <div class="tiles">
   <div class="tile"><b>${today.rows[0].C}</b><span>visites aujourd'hui</span></div>
@@ -1175,7 +1220,7 @@ iframe{width:100%;height:320px;border:0;border-radius:10px}
     src="${first ? `https://maps.google.com/maps?q=${first.LAT},${first.LON}&z=11&output=embed` : 'about:blank'}"></iframe>
   <p class="m" style="margin-top:8px">Position approximative de l'IP. Cliquez un &#128205; pour situer une visite.</p>
 </div>
-<table><thead><tr><th></th><th>Quand</th><th>Prospect</th><th>Page</th><th>Ville, pays</th><th>Organisation / ISP</th><th>Appareil</th><th>Referrer</th><th>IP</th></tr></thead>
+<table><thead><tr><th></th><th>Quand</th><th>Prospect</th><th>Page</th><th>Ville, pays</th><th>Organisation / ISP</th><th>Appareil</th><th>Securite</th><th>Referrer</th><th>IP</th></tr></thead>
 <tbody>${rows || '<tr><td colspan="9">Aucune visite.</td></tr>'}</tbody></table>
 <script>
 document.addEventListener('click', function(e){
