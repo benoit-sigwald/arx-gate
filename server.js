@@ -1390,7 +1390,7 @@ const trackerPage = async (req, res) => {
     const known = new Set(FAMILIES.flatMap(f => f[1]));
     const others = Object.keys(SITES).filter(x => !known.has(x));
     if (others.length) FAMILIES.push(['Autres', others]);
-    const tab = x => `<span class="tabwrap"><a href="${ADMIN_ABS}/tracker?site=${x}" class="tab${x === site ? ' on' : ''}">${esc(x)}${secDot(x)}</a>${openLink(x)}</span>`;
+    const tab = x => `<span class="tabwrap"><a href="${ADMIN_ABS}?site=${x}" class="tab${x === site ? ' on' : ''}">${esc(x)}${secDot(x)}</a>${openLink(x)}</span>`;
     const tabs = FAMILIES.filter(([, list]) => list.some(x => SITES[x]))
       .map(([name, list]) => `<div class="tabrow"><span class="tabfam">${esc(name)}</span>${
         list.filter(x => SITES[x]).map(tab).join('')}</div>`).join('');
