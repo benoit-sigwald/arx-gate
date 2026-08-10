@@ -358,6 +358,10 @@ async function siteMeta(site) {
 const SECURITY = {
   arxcapital:        { label: 'Public',            kind: 'public',  detail: 'Site vitrine, ouvert a tous' },
   'chef-jason':      { label: 'Public',            kind: 'public',  detail: 'Application web ouverte' },
+  training:          { label: 'Public',            kind: 'public',  detail: 'AI Training, sous-site de arxweb' },
+  axperience:        { label: 'Public',            kind: 'public',  detail: 'AXperience, sous-site de arxweb' },
+  nice:              { label: 'Public',            kind: 'public',  detail: 'Pacte Nice IA, sous-site de arxweb' },
+  nissai:            { label: 'Public',            kind: 'public',  detail: 'Nissa IA, sous-site de arxweb' },
   'mcp-root':        { label: 'Public',            kind: 'public',  detail: 'Page racine du domaine MCP' },
   gate:              { label: 'Public',            kind: 'public',  detail: 'Formulaire de demande d acces' },
   '50':              { label: 'Porte prospects',   kind: 'gate',    detail: 'forwardAuth + cookie signe 90 j, validation manuelle' },
@@ -1376,7 +1380,7 @@ const trackerPage = async (req, res) => {
     const li = (arr, k) => arr.map(r => `<li><span>${esc(r[k] || '-')}</span><b>${r.C}</b></li>`).join('');
     // onglets groupes par famille, sur plusieurs lignes
     const FAMILIES = [
-      ['Sites vitrine', ['arxcapital', 'chef-jason', 'mcp-root']],
+      ['Sites vitrine', ['arxcapital', 'training', 'axperience', 'nice', 'nissai', 'chef-jason', 'mcp-root']],
       ['Dossiers prives', ['50', '877', 'cactus']],
       ['Applications', ['blackstone', 'candidatures', 'prospects', 'gate', 'tracker']],
       ['Serveurs MCP', ['mcp-einstein', 'mcp-prisme', 'mcp-immo-rapido', 'omni']],
