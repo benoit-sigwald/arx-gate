@@ -601,14 +601,19 @@ function waitingPage(site, vtoken, l = 'fr', og = null) {
 }
 
 // ---- auto-suivi des pages de la porte ----
-async function trackSelf(req, page) {
-  if (!SITES['gate']) return;
+// `into` = schema ou ecrire. Une demande d acces a un site protege est d abord une visite
+// **de ce site** : sans cela, un dossier prive derriere la porte affiche toujours 0 visite,
+// puisque le visiteur non autorise ne voit jamais la page elle-meme.
+async function trackSelf(req, page, into = 'gate') {
+  const target = SITES[into] ? into : 'gate';
+  if (!SITES[target]) return;
   try {
     const ip = clientIp(req), ua = req.headers['user-agent'] || '';
     const { browser, os, device } = parseUa(ua);
     const g = await geo(ip);
-    await q('gate', `INSERT INTO visits (site,page,referrer,ip,ua,browser,os,device,country,region,city,org,isp,asn,lang,lat,lon)
-      VALUES ('gate',:page,:ref,:ip,:ua,:browser,:os,:device,:country,:region,:city,:org,:isp,:asn,:lang,:lat,:lon)`, {
+    await q(target, `INSERT INTO visits (site,page,referrer,ip,ua,browser,os,device,country,region,city,org,isp,asn,lang,lat,lon)
+      VALUES (:site,:page,:ref,:ip,:ua,:browser,:os,:device,:country,:region,:city,:org,:isp,:asn,:lang,:lat,:lon)`, {
+      site: cut(target, 64),
       page: cut(page, 512), ref: cut(req.headers.referer, 512), ip: cut(ip, 64), ua: cut(ua, 512),
       browser, os, device, country: cut(g.country, 64), region: cut(g.region, 64), city: cut(g.city, 64),
       org: cut(g.org, 160), isp: cut(g.isp, 160), asn: cut(g.asn, 64),
@@ -657,7 +662,8 @@ router.get('/auth', async (req, res) => {
 // ---- formulaire ----
 router.get('/', async (req, res) => {
   const site = SITES[req.query.site] ? req.query.site : Object.keys(SITES)[0];
-  trackSelf(req, '/formulaire?site=' + site);
+  trackSelf(req, '/formulaire?site=' + site);        // journal de la porte
+  if (site !== 'gate') trackSelf(req, '/porte (acces refuse)', site);  // et visite du site vise
   const og = { ...(await siteMeta(site)), site };
   res.type('html').send(formPage(site, req.query.rd, null, {}, lang(req), og));
 });
