@@ -1146,16 +1146,20 @@ router.get('/funnel', async (req, res) => {
   const days = Math.min(parseInt(req.query.days || '30', 10) || 30, 365);
   try {
     const rows = [];
+    // Une seule requete a la fois : en parallele, 20 schemas saturent les sessions de l ADB.
     await withEachSite(async (site) => {
-      const [vis, uniq, cta, pro, appr] = await Promise.all([
-        q(site, `SELECT COUNT(*) c FROM visits WHERE ts >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`, { d: days }),
-        q(site, `SELECT COUNT(DISTINCT ip) c FROM visits WHERE ts >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`, { d: days }),
-        q(site, `SELECT COUNT(*) c FROM visits WHERE page LIKE '/cta:%' AND ts >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`, { d: days }),
-        q(site, `SELECT COUNT(*) c FROM prospects WHERE created_at >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`, { d: days }),
-        q(site, `SELECT COUNT(*) c FROM prospects WHERE status = 'approved' AND created_at >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`, { d: days }),
-      ]);
-      rows.push({ site, vis: vis.rows[0].C, uniq: uniq.rows[0].C, cta: cta.rows[0].C,
-                  pro: pro.rows[0].C, appr: appr.rows[0].C });
+      try {
+        const one = async (sql) => (await q(site, sql, { d: days })).rows[0].C;
+        const vis = await one(`SELECT COUNT(*) c FROM visits WHERE ts >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`);
+        const uniq = await one(`SELECT COUNT(DISTINCT ip) c FROM visits WHERE ts >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`);
+        const cta = await one(`SELECT COUNT(*) c FROM visits WHERE page LIKE '/cta:%' AND ts >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`);
+        const pro = await one(`SELECT COUNT(*) c FROM prospects WHERE created_at >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`);
+        const appr = await one(`SELECT COUNT(*) c FROM prospects WHERE status = 'approved' AND created_at >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`);
+        rows.push({ site, vis, uniq, cta, pro, appr });
+      } catch (e) {
+        console.error(`funnel[${site}]:`, e.message.split('\n')[0]);
+        rows.push({ site, vis: 0, uniq: 0, cta: 0, pro: 0, appr: 0, err: true });
+      }
     });
     const tot = rows.reduce((a, r) => ({
       vis: a.vis + r.vis, uniq: a.uniq + r.uniq, cta: a.cta + r.cta, pro: a.pro + r.pro, appr: a.appr + r.appr,
@@ -1201,7 +1205,7 @@ ${steps.map(([lbl, n, cv]) => `<div class="step">
 </div>`).join('')}
 
 <table><thead><tr><th>Site</th><th>Visiteurs uniques</th><th>Visites</th><th>Clics CTA</th><th>Inscrits</th><th>Approuvés</th></tr></thead>
-<tbody>${rows.map(r => `<tr><td><b>${esc(r.site)}</b> ${openLink(r.site)}</td><td>${r.uniq}</td><td>${r.vis}</td><td>${r.cta}</td><td>${r.pro}</td><td>${r.appr}</td></tr>`).join('')}</tbody></table>
+<tbody>${rows.map(r => `<tr><td><b>${esc(r.site)}</b> ${openLink(r.site)}${r.err ? ' <span class="m">(lecture impossible)</span>' : ''}</td><td>${r.uniq}</td><td>${r.vis}</td><td>${r.cta}</td><td>${r.pro}</td><td>${r.appr}</td></tr>`).join('')}</tbody></table>
 
 <p class="m" style="margin-top:18px">Les clics sur le bouton de réservation sont comptés via le tracker
 (page <code>/cta:calendly</code>). Les rendez-vous réellement tenus et les contrats signés ne sont pas
