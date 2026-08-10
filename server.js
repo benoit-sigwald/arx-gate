@@ -44,7 +44,7 @@ oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
 // Avec un schema par site, garder un pool ouvert par site depasse la limite des que le
 // nombre de sites grandit : on plafonne le nombre de pools et on ferme le moins recemment
 // utilise. MAX_POOLS x poolMax doit rester sous 21.
-const MAX_POOLS = Number(process.env.MAX_POOLS || 8);
+const MAX_POOLS = Number(process.env.MAX_POOLS || 6);
 const pools = {};
 const lastUsed = {};
 async function closePool(site) {
@@ -52,7 +52,7 @@ async function closePool(site) {
   if (!p) return;
   delete pools[site];
   delete lastUsed[site];
-  try { await p.close(2); } catch { /* deja ferme */ }
+  try { await p.close(0); } catch { /* deja ferme */ }
 }
 async function pool(site) {
   const cfg = SITES[site];
@@ -68,7 +68,7 @@ async function pool(site) {
       connectString: process.env.ORA_CONNECT,
       configDir: WALLET_DIR, walletLocation: WALLET_DIR,
       walletPassword: process.env.ORA_WALLET_PASSWORD,
-      poolMin: 0, poolMax: 2, poolTimeout: 30,
+      poolMin: 0, poolMax: 1, poolTimeout: 5,
     });
   }
   lastUsed[site] = process.hrtime.bigint ? Number(process.hrtime.bigint() / 1000000n) : 0;
@@ -84,10 +84,21 @@ async function withEachSite(fn) {
     finally { if (!reused) await closePool(site); }
   }
 }
-async function q(site, sql, binds = {}, opts = {}) {
-  const c = await (await pool(site)).getConnection();
-  try { return await c.execute(sql, binds, { autoCommit: true, ...opts }); }
-  finally { await c.close(); }
+async function q(site, sql, binds = {}, opts = {}, retry = true) {
+  let c;
+  try {
+    c = await (await pool(site)).getConnection();
+    return await c.execute(sql, binds, { autoCommit: true, ...opts });
+  } catch (e) {
+    // NJS-500/NJS-521 : session coupee par l ADB (limite atteinte, pool perime).
+    // On jette le pool et on retente une fois, le temps que les sessions se liberent.
+    if (retry && /NJS-5\d\d/.test(e.message || '')) {
+      await closePool(site);
+      await new Promise(r => setTimeout(r, 400));
+      return q(site, sql, binds, opts, false);
+    }
+    throw e;
+  } finally { if (c) { try { await c.close(); } catch { /* deja fermee */ } } }
 }
 
 // ---------- helpers ----------
