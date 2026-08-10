@@ -50,10 +50,26 @@ async function pool(site) {
       connectString: process.env.ORA_CONNECT,
       configDir: WALLET_DIR, walletLocation: WALLET_DIR,
       walletPassword: process.env.ORA_WALLET_PASSWORD,
-      poolMin: 0, poolMax: 3, poolTimeout: 120,
+      poolMin: 0, poolMax: 2, poolTimeout: 30,
     });
   }
   return pools[site];
+}
+// L Autonomous Database « Always Free » plafonne les sessions simultanees : avec 20 sites
+// declares, les pages qui parcourent tous les schemas (funnel, threats, share) doivent
+// refermer les pools qu elles ont ouverts au passage, sinon la connexion est coupee.
+async function withEachSite(fn) {
+  for (const site of Object.keys(SITES)) {
+    const reused = !!pools[site];
+    try { await fn(site); }
+    finally {
+      if (!reused && pools[site]) {
+        const p = pools[site];
+        delete pools[site];
+        try { await p.close(2); } catch { /* pool deja ferme */ }
+      }
+    }
+  }
 }
 async function q(site, sql, binds = {}, opts = {}) {
   const c = await (await pool(site)).getConnection();
@@ -1015,13 +1031,13 @@ router.get('/threats', async (req, res) => {
   const days = Math.min(parseInt(req.query.days || '30', 10) || 30, 365);
   try {
     const perIp = new Map();
-    for (const site of Object.keys(SITES)) {
+    await withEachSite(async (site) => {
       let rows = [];
       try {
         rows = (await q(site, `SELECT ip, page, referrer, ua, city, country, org, isp, lat, lon, ts
           FROM visits WHERE ts >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')
           ORDER BY ts DESC FETCH FIRST 4000 ROWS ONLY`, { d: days })).rows;
-      } catch { continue; }
+      } catch { return; }
       for (const v of rows) {
         const ip = v.IP || 'inconnue';
         if (!perIp.has(ip)) perIp.set(ip, {
@@ -1038,7 +1054,7 @@ router.get('/threats', async (req, res) => {
         if (/refus|denied|401|403/i.test(String(v.REFERRER || ''))) e.denied++;
         if (/bot|crawler|spider|curl|wget|python|scan/i.test(String(v.UA || ''))) e.bots++;
       }
-    }
+    });
     const items = [...perIp.values()].map(e => {
       const reasons = [];
       let score = 0;
@@ -1130,7 +1146,7 @@ router.get('/funnel', async (req, res) => {
   const days = Math.min(parseInt(req.query.days || '30', 10) || 30, 365);
   try {
     const rows = [];
-    for (const site of Object.keys(SITES)) {
+    await withEachSite(async (site) => {
       const [vis, uniq, cta, pro, appr] = await Promise.all([
         q(site, `SELECT COUNT(*) c FROM visits WHERE ts >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`, { d: days }),
         q(site, `SELECT COUNT(DISTINCT ip) c FROM visits WHERE ts >= SYSTIMESTAMP - NUMTODSINTERVAL(:d,'DAY')`, { d: days }),
@@ -1140,7 +1156,7 @@ router.get('/funnel', async (req, res) => {
       ]);
       rows.push({ site, vis: vis.rows[0].C, uniq: uniq.rows[0].C, cta: cta.rows[0].C,
                   pro: pro.rows[0].C, appr: appr.rows[0].C });
-    }
+    });
     const tot = rows.reduce((a, r) => ({
       vis: a.vis + r.vis, uniq: a.uniq + r.uniq, cta: a.cta + r.cta, pro: a.pro + r.pro, appr: a.appr + r.appr,
     }), { vis: 0, uniq: 0, cta: 0, pro: 0, appr: 0 });
@@ -1198,7 +1214,7 @@ router.get('/share', async (req, res) => {
   if (!authed(req, res)) return;
   try {
     const cards = [];
-    for (const site of Object.keys(SITES)) {
+    await withEachSite(async (site) => {
       const db = await dbMeta(site);
       const auto = await siteMeta(site);
       const m = db && (db.title || db.desc || db.img) ? db : auto;
@@ -1228,7 +1244,7 @@ router.get('/share', async (req, res) => {
           <a class="lnk" href="${siteUrl(site)}" target="_blank" rel="noopener">${esc(siteUrl(site))}</a>
         </div>
       </form>`);
-    }
+    });
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Liens partages</title><style>
