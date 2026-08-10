@@ -453,6 +453,24 @@ function waitingPage(site, vtoken, l = 'fr', og = null) {
   </script>`, og);
 }
 
+// ---- auto-suivi des pages de la porte ----
+async function trackSelf(req, page) {
+  if (!SITES['gate']) return;
+  try {
+    const ip = clientIp(req), ua = req.headers['user-agent'] || '';
+    const { browser, os, device } = parseUa(ua);
+    const g = await geo(ip);
+    await q('gate', `INSERT INTO visits (site,page,referrer,ip,ua,browser,os,device,country,region,city,org,isp,asn,lang,lat,lon)
+      VALUES ('gate',:page,:ref,:ip,:ua,:browser,:os,:device,:country,:region,:city,:org,:isp,:asn,:lang,:lat,:lon)`, {
+      page: cut(page, 512), ref: cut(req.headers.referer, 512), ip: cut(ip, 64), ua: cut(ua, 512),
+      browser, os, device, country: cut(g.country, 64), region: cut(g.region, 64), city: cut(g.city, 64),
+      org: cut(g.org, 160), isp: cut(g.isp, 160), asn: cut(g.asn, 64),
+      lang: cut((req.headers['accept-language'] || '').split(',')[0], 32),
+      lat: g.lat ?? null, lon: g.lon ?? null,
+    });
+  } catch (e) { console.error('trackSelf:', e.message); }
+}
+
 // ---- forwardauth ----
 router.get('/auth', async (req, res) => {
   // le site vient du middleware Traefik (?site=…) ; sinon on le déduit du chemin d'origine
@@ -492,6 +510,7 @@ router.get('/auth', async (req, res) => {
 // ---- formulaire ----
 router.get('/', async (req, res) => {
   const site = SITES[req.query.site] ? req.query.site : Object.keys(SITES)[0];
+  trackSelf(req, '/formulaire?site=' + site);
   const og = { ...(await siteMeta(site)), site };
   res.type('html').send(formPage(site, req.query.rd, null, {}, lang(req), og));
 });
