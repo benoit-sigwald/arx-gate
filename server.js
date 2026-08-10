@@ -1353,11 +1353,6 @@ router.post('/share/delete', form, async (req, res) => {
   } catch (e) { console.error('share-delete:', e.message); res.status(500).send('erreur: ' + esc(e.message)); }
 });
 
-// ancien chemin, garde pour les liens deja partages
-router.get('/visits', (req, res) => {
-  const qs = req.originalUrl.split('?')[1];
-  res.redirect(301, `${ADMIN_ABS}${qs ? '?' + qs : ''}`);
-});
 // racine du back-office : montee a la fois sur /tracker (via app.get) et sur /<base>/tracker
 const trackerPage = async (req, res) => {
   if (!authed(req, res)) return;
@@ -1629,6 +1624,20 @@ router.get('/img', async (req, res) => {
   } catch (e) { console.error('img:', e.message); res.redirect(302, `${BASE_ABS}/p/preview-arxcapital.png`); }
 });
 router.get('/health', (req, res) => res.send('ok'));
+
+// Anciens chemins du back-office sous /gate -> /tracker. Traefik retire le prefixe /gate
+// avant de nous transmettre la requete, mais laisse l entete X-Forwarded-Prefix : c est
+// le seul moyen de distinguer /gate/admin de /admin.
+const LEGACY = /^\/(visits|tracker|admin|funnel|threats|share|prospect)(\/.*)?$/;
+app.use((req, res, next) => {
+  if (req.method !== 'GET' || !BASE_ABS) return next();
+  if ((req.headers['x-forwarded-prefix'] || '') !== BASE_ABS) return next();
+  const m = req.path.match(LEGACY);
+  if (!m) return next();
+  const section = (m[1] === 'visits' || m[1] === 'tracker') ? '' : '/' + m[1];
+  const qs = req.originalUrl.split('?')[1];
+  res.redirect(301, `${ADMIN_ABS}${section}${m[2] || ''}${qs ? '?' + qs : ''}`);
+});
 
 app.use('/', router);
 const BASE = process.env.BASE_PATH;
