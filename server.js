@@ -40,11 +40,29 @@ const SITE_URLS = JSON.parse(Buffer.from(process.env.SITE_URLS_B64 || '', 'base6
 // ---------- db : un pool par site ----------
 const oracledb = require('oracledb');
 oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
+// L Autonomous Database « Always Free » accepte 21 sessions simultanees (mesure).
+// Avec un schema par site, garder un pool ouvert par site depasse la limite des que le
+// nombre de sites grandit : on plafonne le nombre de pools et on ferme le moins recemment
+// utilise. MAX_POOLS x poolMax doit rester sous 21.
+const MAX_POOLS = Number(process.env.MAX_POOLS || 8);
 const pools = {};
+const lastUsed = {};
+async function closePool(site) {
+  const p = pools[site];
+  if (!p) return;
+  delete pools[site];
+  delete lastUsed[site];
+  try { await p.close(2); } catch { /* deja ferme */ }
+}
 async function pool(site) {
   const cfg = SITES[site];
   if (!cfg) throw new Error('site inconnu: ' + site);
   if (!pools[site]) {
+    const open = Object.keys(pools);
+    if (open.length >= MAX_POOLS) {
+      const oldest = open.sort((a, b) => (lastUsed[a] || 0) - (lastUsed[b] || 0))[0];
+      await closePool(oldest);
+    }
     pools[site] = await oracledb.createPool({
       user: cfg.user, password: cfg.password,
       connectString: process.env.ORA_CONNECT,
@@ -53,6 +71,7 @@ async function pool(site) {
       poolMin: 0, poolMax: 2, poolTimeout: 30,
     });
   }
+  lastUsed[site] = process.hrtime.bigint ? Number(process.hrtime.bigint() / 1000000n) : 0;
   return pools[site];
 }
 // L Autonomous Database « Always Free » plafonne les sessions simultanees : avec 20 sites
@@ -62,13 +81,7 @@ async function withEachSite(fn) {
   for (const site of Object.keys(SITES)) {
     const reused = !!pools[site];
     try { await fn(site); }
-    finally {
-      if (!reused && pools[site]) {
-        const p = pools[site];
-        delete pools[site];
-        try { await p.close(2); } catch { /* pool deja ferme */ }
-      }
-    }
+    finally { if (!reused) await closePool(site); }
   }
 }
 async function q(site, sql, binds = {}, opts = {}) {
