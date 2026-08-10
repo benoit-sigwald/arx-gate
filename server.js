@@ -202,8 +202,8 @@ function navBar(current, { site = '', key = '' } = {}) {
   return `<style>
 .gnav{display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:#fff;border:1px solid #e4e8ef;
  border-radius:14px;padding:10px 18px;margin-bottom:6px}
-.gnav .brand{display:flex;align-items:center;gap:9px;font-weight:700;color:#1b354d;font-size:1rem;margin-right:auto}
-.gnav .brand span{font-size:1.2rem}
+.gnav .brand{display:flex;align-items:center;gap:10px;font-weight:700;color:#1b354d;font-size:1.05rem;margin-right:auto}
+.gnav .brand img{height:30px;width:auto;display:block}
 .gnav-l{color:#415060;text-decoration:none;font-size:.88rem;padding:6px 2px;border-bottom:2px solid transparent}
 .gnav-l:hover{color:#1b354d}
 .gnav-l.on{color:#1b354d;font-weight:600;border-bottom-color:#ae8d57}
@@ -211,7 +211,7 @@ function navBar(current, { site = '', key = '' } = {}) {
  text-decoration:none;border-bottom:none}
 .gnav-sub{color:#5b6472;font-size:.8rem;margin:0 0 16px;padding-left:4px}
 </style>
-<div class="gnav"><span class="brand"><span>&#128274;</span> arx-gate</span>${links}
+<div class="gnav"><span class="brand"><img src="${ADMIN_ABS}/p/arx-logo.png" alt="Arx"> Arx Tracker</span>${links}
 <a class="cta" href="https://arx-consulting.com" target="_blank" rel="noopener">Arx Consulting</a></div>
 <p class="gnav-sub">${esc(detail)}</p>`;
 }
