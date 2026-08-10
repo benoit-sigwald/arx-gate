@@ -153,6 +153,42 @@ function openLink(site, style = '') {
   return `<a href="${siteUrl(site)}" target="_blank" rel="noopener" title="ouvrir ${site} : ${siteUrl(site)}"
     style="text-decoration:none;font-size:.9em;${style}">&#8599;</a>`;
 }
+// ---------- barre de menu du back-office ----------
+// Une seule definition des sections : titre, chemin et ce que la page montre.
+const MENU = [
+  ['admin',   'Prospects', 'Fiches, parcours et statut de chaque inscrit'],
+  ['tracker', 'Tracker',   'Visites, pages vues, provenance et carte'],
+  ['funnel',  'Tunnel',    'Visiteurs uniques, clics CTA, inscrits, approuves'],
+  ['threats', 'Menaces',   'IP suspectes, scans de vulnerabilites, robots'],
+  ['share',   'Partages',  'Titre, description et image des liens partages'],
+];
+function navBar(current, { site = '', key = '' } = {}) {
+  const qs = (path) => {
+    const p = [];
+    if (site && (path === 'admin' || path === 'tracker')) p.push('site=' + encodeURIComponent(site));
+    if (key) p.push('key=' + encodeURIComponent(key));
+    return p.length ? '?' + p.join('&') : '';
+  };
+  const links = MENU.map(([path, label, detail]) =>
+    `<a href="${BASE_ABS}/${path}${qs(path)}" title="${esc(detail)}"
+       class="gnav-l${path === current ? ' on' : ''}">${esc(label)}</a>`).join('');
+  const detail = (MENU.find(m => m[0] === current) || [, , ''])[2];
+  return `<style>
+.gnav{display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:#fff;border:1px solid #e4e8ef;
+ border-radius:14px;padding:10px 18px;margin-bottom:6px}
+.gnav .brand{display:flex;align-items:center;gap:9px;font-weight:700;color:#1b354d;font-size:1rem;margin-right:auto}
+.gnav .brand span{font-size:1.2rem}
+.gnav-l{color:#415060;text-decoration:none;font-size:.88rem;padding:6px 2px;border-bottom:2px solid transparent}
+.gnav-l:hover{color:#1b354d}
+.gnav-l.on{color:#1b354d;font-weight:600;border-bottom-color:#ae8d57}
+.gnav .cta{background:#1b354d;color:#fff;border-radius:9px;padding:8px 16px;font-size:.85rem;font-weight:600;
+ text-decoration:none;border-bottom:none}
+.gnav-sub{color:#5b6472;font-size:.8rem;margin:0 0 16px;padding-left:4px}
+</style>
+<div class="gnav"><span class="brand"><span>&#128274;</span> arx-gate</span>${links}
+<a class="cta" href="https://arx-consulting.com" target="_blank" rel="noopener">Arx Consulting</a></div>
+<p class="gnav-sub">${esc(detail)}</p>`;
+}
 function gateBase(site) {
   try { return new URL(siteUrl(site)).origin + '/gate'; } catch { return PUBLIC_URL; }
 }
@@ -874,7 +910,8 @@ th{text-align:left;padding:10px 12px;background:#f2f5f9;color:#1b354d;font-size:
 td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
 .m{color:#5b6472;font-size:.78rem}a{color:#ae8d57}
 </style></head><body><div class="w">
-<h1>Prospects</h1><p class="m"><a href="${BASE_ABS}/prospect/new?site=${site}"><b>+ Ajouter un prospect</b></a> &middot; <a href="${BASE_ABS}/visits?site=${site}"><b>Voir les visites (tracker) &rarr;</b></a> &middot; <a href="${BASE_ABS}/share"><b>Liens partages</b></a> &middot; <a href="${BASE_ABS}/funnel"><b>Tunnel de conversion</b></a> &middot; <a href="${BASE_ABS}/threats"><b>Carte des menaces</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
+${navBar('admin', { site, key: req.query.key })}
+<h1>Prospects</h1><p class="m"><a href="${BASE_ABS}/prospect/new?site=${site}"><b>+ Ajouter un prospect</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${BASE_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
 <div style="margin:14px 0">${tabs}</div>
 <div class="tiles">
   <div class="tile"><b>${s.TOTAL || 0}</b><span>prospects</span></div>
@@ -1093,9 +1130,9 @@ td{padding:9px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
 a.pin{text-decoration:none;font-size:1rem}
 code{background:#f2f5f9;padding:1px 5px;border-radius:4px;font-size:.78rem}
 </style></head><body><div class="w">
+${navBar('threats', { key: req.query.key })}
 <h1>Carte des menaces</h1>
-<p class="m"><a href="${BASE_ABS}/visits">visites</a> &middot; <a href="${BASE_ABS}/admin">prospects</a> &middot;
-<a href="${BASE_ABS}/funnel">tunnel</a> &middot; ${days} derniers jours &middot;
+<p class="m">${days} derniers jours &middot;
 <a href="${BASE_ABS}/threats?days=7">7 j</a> · <a href="${BASE_ABS}/threats?days=30">30 j</a> · <a href="${BASE_ABS}/threats?days=90">90 j</a></p>
 
 <div class="tiles">
@@ -1189,9 +1226,9 @@ th{text-align:left;padding:9px 12px;background:#f2f5f9;color:#1b354d;font-size:.
 td{padding:9px 12px;border-top:1px solid #e4e8ef}
 .days a{margin-right:10px}
 </style></head><body><div class="w">
+${navBar('funnel', { key: req.query.key })}
 <h1>Tunnel de conversion</h1>
-<p class="m"><a href="${BASE_ABS}/admin">prospects</a> &middot; <a href="${BASE_ABS}/visits">visites</a> &middot;
-<a href="${BASE_ABS}/share">liens partagés</a> &middot; derniers ${days} jours</p>
+<p class="m">derniers ${days} jours</p>
 <p class="m days">Période :
   <a href="${BASE_ABS}/funnel?days=7">7 j</a>
   <a href="${BASE_ABS}/funnel?days=30">30 j</a>
@@ -1271,8 +1308,9 @@ button.alt:hover{border-color:#a32d2d;color:#a32d2d}
 a{color:#ae8d57;text-decoration:none;font-size:.82rem}
 .m{color:#5b6472;font-size:.85rem}
 </style></head><body><div class="w">
+${navBar('share', { key: req.query.key })}
 <h1>Liens partages</h1>
-<p class="m"><a href="${BASE_ABS}/admin">&larr; prospects</a> &middot; ce que voient WhatsApp, LinkedIn ou iMessage quand vous partagez un lien protege.
+<p class="m">Ce que voient WhatsApp, LinkedIn ou iMessage quand vous partagez un lien protege.
 ${req.query.ok ? `<b style="color:#1d7a4f"> &middot; ${esc(req.query.ok)}</b>` : ''}</p>
 ${cards.join('')}
 <p class="m">Astuce : WhatsApp garde l'apercu en cache. Ajoutez <code>?v=2</code> a la fin du lien pour forcer sa regeneration.</p>
@@ -1310,7 +1348,12 @@ router.post('/share/delete', form, async (req, res) => {
   } catch (e) { console.error('share-delete:', e.message); res.status(500).send('erreur: ' + esc(e.message)); }
 });
 
-router.get('/visits', async (req, res) => {
+// ancien chemin, garde pour les liens deja partages
+router.get('/visits', (req, res) => {
+  const qs = req.originalUrl.split('?')[1];
+  res.redirect(301, `${BASE_ABS}/tracker${qs ? '?' + qs : ''}`);
+});
+router.get('/tracker', async (req, res) => {
   if (!authed(req, res)) return;
   const site = SITES[req.query.site] ? req.query.site : Object.keys(SITES)[0];
   try {
@@ -1341,7 +1384,7 @@ router.get('/visits', async (req, res) => {
     const known = new Set(FAMILIES.flatMap(f => f[1]));
     const others = Object.keys(SITES).filter(x => !known.has(x));
     if (others.length) FAMILIES.push(['Autres', others]);
-    const tab = x => `<span class="tabwrap"><a href="${BASE_ABS}/visits?site=${x}" class="tab${x === site ? ' on' : ''}">${esc(x)}${secDot(x)}</a>${openLink(x)}</span>`;
+    const tab = x => `<span class="tabwrap"><a href="${BASE_ABS}/tracker?site=${x}" class="tab${x === site ? ' on' : ''}">${esc(x)}${secDot(x)}</a>${openLink(x)}</span>`;
     const tabs = FAMILIES.filter(([, list]) => list.some(x => SITES[x]))
       .map(([name, list]) => `<div class="tabrow"><span class="tabfam">${esc(name)}</span>${
         list.filter(x => SITES[x]).map(tab).join('')}</div>`).join('');
@@ -1358,7 +1401,7 @@ router.get('/visits', async (req, res) => {
       <td class="m">${esc(v.IP || '')}</td></tr>`).join('');
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
-<title>Visites - ${esc(site)}</title><style>
+<title>Tracker - ${esc(site)}</title><style>
 body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
 .w{max-width:1250px;margin:0 auto}h1{font-size:1.4rem;margin:0 0 4px;color:#1b354d}
 h2{font-size:.95rem;margin-bottom:10px;color:#1b354d}
@@ -1391,8 +1434,9 @@ td{padding:8px 10px;border-top:1px solid #e4e8ef;vertical-align:top;max-width:22
 iframe{width:100%;height:320px;border:0;border-radius:10px}
 .nav a{margin-right:10px}
 </style></head><body><div class="w">
-<h1>Visites</h1>
-<p class="m nav"><a href="${BASE_ABS}/admin?site=${site}">&larr; prospects</a> &middot; <a href="${BASE_ABS}/threats">carte des menaces</a> &middot; schema Oracle dedie par site
+${navBar('tracker', { site, key: req.query.key })}
+<h1>Tracker</h1>
+<p class="m nav">Schema Oracle dedie par site
 &middot; protection de ce site : ${secBadge(site, '', '')} <span class="m">${esc((SECURITY[site] || {}).detail || '')}</span></p>
 <div style="margin:14px 0">${tabs}</div>
 <div class="tiles">
