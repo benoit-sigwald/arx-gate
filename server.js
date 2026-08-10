@@ -132,6 +132,11 @@ function siteUrl(site) {
 }
 // duckdns.org est un « public suffix » : impossible de partager un cookie entre sous-domaines.
 // Le lien d'accès pointe donc vers la porte servie sur l'hôte du site, qui y pose un cookie d'hôte.
+// petit lien « ouvrir l'element dans un nouvel onglet », affiche a cote de chaque site
+function openLink(site, style = '') {
+  return `<a href="${siteUrl(site)}" target="_blank" rel="noopener" title="ouvrir ${site} : ${siteUrl(site)}"
+    style="text-decoration:none;font-size:.9em;${style}">&#8599;</a>`;
+}
 function gateBase(site) {
   try { return new URL(siteUrl(site)).origin + '/gate'; } catch { return PUBLIC_URL; }
 }
@@ -307,7 +312,13 @@ const SECURITY = {
   'mcp-einstein':    { label: 'Jeton Bearer',      kind: 'token',   detail: 'Authorization: Bearer, ou prefixe /t/<jeton>' },
   'mcp-prisme':      { label: 'Jeton Bearer',      kind: 'token',   detail: 'Authorization: Bearer, ou prefixe /t/<jeton>' },
   'mcp-immo-rapido': { label: 'Jeton Bearer',      kind: 'token',   detail: 'Authorization: Bearer + portail web protege' },
-  'data-api':        { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST, cle de service' },
+  'data-api':        { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST schema einstein, cle de service' },
+  omni:              { label: 'Jeton Bearer',      kind: 'token',   detail: 'Serveur MCP omni, Authorization: Bearer' },
+  tracker:           { label: 'Cle admin',         kind: 'key',     detail: 'Ancien tableau de bord tracker, cle de session' },
+  minio:             { label: 'Cle S3',            kind: 'key',     detail: 'MinIO, bucket rapports en lecture publique' },
+  coolify:           { label: 'Compte Coolify',    kind: 'key',     detail: 'Tableau de bord Coolify, mot de passe ou Google OAuth' },
+  'db-prisme':       { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST schema prisme, cle de service' },
+  'db-cv':           { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST schema cv, cle de service' },
 };
 const SEC_COLORS = {
   public:  ['#1d7a4f', '#e6f4ec', '#b7e0c8'],
@@ -820,8 +831,10 @@ router.get('/admin', async (req, res) => {
     const fmt = t => t ? new Date(t).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
     const badge = st => ({ approved: '#1d7a4f', email_verified: '#ae8d57', pending: '#8a8f98', rejected: '#a32d2d' }[st] || '#8a8f98');
     const tabs = Object.keys(SITES).map(x =>
-      `<a href="${BASE_ABS}/admin?site=${x}" style="padding:6px 14px;border:1px solid #e4e8ef;border-radius:8px;text-decoration:none;
-        color:${x === site ? '#fff' : '#1b354d'};background:${x === site ? '#1b354d' : '#fff'};font-size:.85rem">${esc(x)}</a>`).join(' ');
+      `<span style="display:inline-flex;align-items:center;gap:5px;margin:0 6px 6px 0;padding:5px 10px;border:1px solid #e4e8ef;border-radius:8px;
+        background:${x === site ? '#1b354d' : '#fff'};font-size:.85rem">
+        <a href="${BASE_ABS}/admin?site=${x}" style="text-decoration:none;color:${x === site ? '#fff' : '#1b354d'}">${esc(x)}</a>
+        ${openLink(x, `color:${x === site ? '#fff' : '#ae8d57'}`)}</span>`).join('');
     const rows = pros.rows.map(p => `<tr onclick="location.href='${BASE_ABS}/prospect?site=${site}&id=${p.ID}'" style="cursor:pointer">
       <td>${fmt(p.CREATED_AT)}</td>
       <td><b>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)}</b><br><span class="m">${esc(p.COMPANY || '')}</span></td>
@@ -1172,7 +1185,7 @@ ${steps.map(([lbl, n, cv]) => `<div class="step">
 </div>`).join('')}
 
 <table><thead><tr><th>Site</th><th>Visiteurs uniques</th><th>Visites</th><th>Clics CTA</th><th>Inscrits</th><th>Approuvés</th></tr></thead>
-<tbody>${rows.map(r => `<tr><td><b>${esc(r.site)}</b></td><td>${r.uniq}</td><td>${r.vis}</td><td>${r.cta}</td><td>${r.pro}</td><td>${r.appr}</td></tr>`).join('')}</tbody></table>
+<tbody>${rows.map(r => `<tr><td><b>${esc(r.site)}</b> ${openLink(r.site)}</td><td>${r.uniq}</td><td>${r.vis}</td><td>${r.cta}</td><td>${r.pro}</td><td>${r.appr}</td></tr>`).join('')}</tbody></table>
 
 <p class="m" style="margin-top:18px">Les clics sur le bouton de réservation sont comptés via le tracker
 (page <code>/cta:calendly</code>). Les rendez-vous réellement tenus et les contrats signés ne sont pas
@@ -1301,13 +1314,14 @@ router.get('/visits', async (req, res) => {
     const FAMILIES = [
       ['Sites vitrine', ['arxcapital', 'chef-jason', 'mcp-root']],
       ['Dossiers prives', ['50', '877', 'cactus']],
-      ['Applications', ['blackstone', 'candidatures', 'prospects', 'gate']],
-      ['Serveurs MCP & API', ['mcp-einstein', 'mcp-prisme', 'mcp-immo-rapido', 'data-api']],
+      ['Applications', ['blackstone', 'candidatures', 'prospects', 'gate', 'tracker']],
+      ['Serveurs MCP', ['mcp-einstein', 'mcp-prisme', 'mcp-immo-rapido', 'omni']],
+      ['Donnees & infra', ['data-api', 'db-prisme', 'db-cv', 'minio', 'coolify']],
     ];
     const known = new Set(FAMILIES.flatMap(f => f[1]));
     const others = Object.keys(SITES).filter(x => !known.has(x));
     if (others.length) FAMILIES.push(['Autres', others]);
-    const tab = x => `<a href="${BASE_ABS}/visits?site=${x}" class="tab${x === site ? ' on' : ''}">${esc(x)}${secDot(x)}</a>`;
+    const tab = x => `<span class="tabwrap"><a href="${BASE_ABS}/visits?site=${x}" class="tab${x === site ? ' on' : ''}">${esc(x)}${secDot(x)}</a>${openLink(x)}</span>`;
     const tabs = FAMILIES.filter(([, list]) => list.some(x => SITES[x]))
       .map(([name, list]) => `<div class="tabrow"><span class="tabfam">${esc(name)}</span>${
         list.filter(x => SITES[x]).map(tab).join('')}</div>`).join('');
@@ -1347,6 +1361,7 @@ td{padding:8px 10px;border-top:1px solid #e4e8ef;vertical-align:top;max-width:22
 .tab{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border:1px solid #e4e8ef;border-radius:8px;
  text-decoration:none;color:#1b354d;background:#fff;font-size:.85rem}
 .tab.on{background:#1b354d;color:#fff;border-color:#1b354d}
+.tabwrap{display:inline-flex;align-items:center;gap:4px}.tabwrap>a:last-child{color:#ae8d57}
 .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
 .threat{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:18px;margin-bottom:20px}
 .threat h2{margin-bottom:12px}
