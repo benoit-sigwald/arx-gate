@@ -44,23 +44,26 @@ oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
 // Avec un schema par site, garder un pool ouvert par site depasse la limite des que le
 // nombre de sites grandit : on plafonne le nombre de pools et on ferme le moins recemment
 // utilise. MAX_POOLS x poolMax doit rester sous 21.
-const MAX_POOLS = Number(process.env.MAX_POOLS || 6);
+const MAX_POOLS = Number(process.env.MAX_POOLS || 10);
 const pools = {};
 const lastUsed = {};
+const busy = {};   // requetes en cours par site : on ne ferme jamais un pool occupe
 async function closePool(site) {
   const p = pools[site];
   if (!p) return;
   delete pools[site];
   delete lastUsed[site];
-  try { await p.close(0); } catch { /* deja ferme */ }
+  try { await p.close(5); } catch { /* deja ferme */ }
 }
 async function pool(site) {
   const cfg = SITES[site];
   if (!cfg) throw new Error('site inconnu: ' + site);
   if (!pools[site]) {
-    const open = Object.keys(pools);
-    if (open.length >= MAX_POOLS) {
-      const oldest = open.sort((a, b) => (lastUsed[a] || 0) - (lastUsed[b] || 0))[0];
+    // Eviction du pool inactif le plus ancien. Fermer un pool occupe couperait la
+    // requete en cours : la page repartait alors en reessai et pouvait mettre 25 s.
+    const idle = Object.keys(pools).filter(s => !busy[s]);
+    if (Object.keys(pools).length >= MAX_POOLS && idle.length) {
+      const oldest = idle.sort((a, b) => (lastUsed[a] || 0) - (lastUsed[b] || 0))[0];
       await closePool(oldest);
     }
     pools[site] = await oracledb.createPool({
@@ -86,6 +89,7 @@ async function withEachSite(fn) {
 }
 async function q(site, sql, binds = {}, opts = {}, retry = true) {
   let c;
+  busy[site] = (busy[site] || 0) + 1;
   try {
     c = await (await pool(site)).getConnection();
     return await c.execute(sql, binds, { autoCommit: true, ...opts });
@@ -98,7 +102,10 @@ async function q(site, sql, binds = {}, opts = {}, retry = true) {
       return q(site, sql, binds, opts, false);
     }
     throw e;
-  } finally { if (c) { try { await c.close(); } catch { /* deja fermee */ } } }
+  } finally {
+    busy[site] = Math.max(0, (busy[site] || 1) - 1);
+    if (c) { try { await c.close(); } catch { /* deja fermee */ } }
+  }
 }
 
 // ---------- helpers ----------
