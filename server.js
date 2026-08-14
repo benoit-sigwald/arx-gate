@@ -193,6 +193,50 @@ const MENU = [
   ['threats', 'Menaces',   'IP suspectes, scans de vulnerabilites, robots'],
   ['share',   'Partages',  'Titre, description et image des liens partages'],
 ];
+// Documentation de reference : ouvrir l architecture sans la chercher sur le Drive.
+const DOCS_REPO = 'https://github.com/benoit-sigwald/OCI-Migration/blob/main';
+const DOCS = [
+  ['Comprendre l infra', [
+    ['INFRASTRUCTURE.md',           'Architecture complete : serveur, reseau, Coolify, DNS, HTTPS'],
+    ['STATUS.md',                   'Etat reel : URLs live, apps deployees, phases terminees'],
+    ['REFERENCE.md',                'Identifiants, UUID, chemins et commandes utiles'],
+    ['STACK.md',                    'Briques techniques et versions'],
+  ]],
+  ['Operations OCI', [
+    ['OCI-API-RESIZE-PROCEDURE.md', 'Cle API OCI et agrandissement du disque a chaud'],
+    ['PLAN-everything-on-oci.md',   'Plan de migration de tous les workloads'],
+    ['RECAP.md',                    'Recapitulatif et garde-fous free tier'],
+  ]],
+  ['Projets', [
+    ['BLACKSTONE-ARCHITECTURE.md',  'Architecture du module trading'],
+    ['SERVICE-BRIEFS.md',           'Fiches par service'],
+    ['OFFERS.md',                   'Offres commercialisables a partir de la stack'],
+  ]],
+];
+const REPOS = [
+  ['arx-gate',        'Porte d acces, tracker et prospects (cette application)'],
+  ['mail-review',     'Quarantaine email : revue, restauration, corbeille'],
+  ['mailbot-api',     'Tri spam en cascade : modele local puis Mistral'],
+  ['whatsapp-bridge', 'WhatsApp : tri, assistant omni, envoi'],
+  ['OCI-Migration',   'Documentation complete de l infrastructure'],
+];
+
+function docsMenu() {
+  const group = (title, items) =>
+    `<div class="gdoc-g"><span class="gdoc-t">${esc(title)}</span>` +
+    items.map(([file, detail]) =>
+      `<a href="${DOCS_REPO}/${encodeURIComponent(file)}" target="_blank" rel="noopener"
+         title="${esc(detail)}">${esc(file.replace(/\.md$/, ''))}</a>`).join('') + '</div>';
+
+  const repos = `<div class="gdoc-g"><span class="gdoc-t">Depots</span>` +
+    REPOS.map(([name, detail]) =>
+      `<a href="https://github.com/benoit-sigwald/${name}" target="_blank" rel="noopener"
+         title="${esc(detail)}">${esc(name)}</a>`).join('') + '</div>';
+
+  return `<details class="gdoc"><summary>Documents</summary>
+<div class="gdoc-p">${DOCS.map(([t, items]) => group(t, items)).join('')}${repos}</div></details>`;
+}
+
 function navBar(current, { site = '', key = '' } = {}) {
   const qs = (path) => {
     const p = [];
@@ -217,8 +261,25 @@ function navBar(current, { site = '', key = '' } = {}) {
 .gnav .cta{background:#1b354d;color:#fff;border-radius:9px;padding:8px 16px;font-size:.85rem;font-weight:600;
  text-decoration:none;border-bottom:none}
 .gnav-sub{color:#5b6472;font-size:.8rem;margin:0 0 16px;padding-left:4px}
+.gdoc{position:relative}
+.gdoc summary{list-style:none;cursor:pointer;color:#415060;font-size:.88rem;padding:6px 2px;
+ border-bottom:2px solid transparent}
+.gdoc summary::-webkit-details-marker{display:none}
+.gdoc summary::after{content:" \\25BE";color:#93a1b0}
+.gdoc[open] summary{color:#1b354d;font-weight:600;border-bottom-color:#ae8d57}
+.gdoc-p{position:absolute;right:0;top:calc(100% + 10px);z-index:40;background:#fff;
+ border:1px solid #e4e8ef;border-radius:12px;box-shadow:0 10px 30px rgba(27,53,77,.13);
+ padding:12px 6px;min-width:260px;max-height:70vh;overflow:auto}
+.gdoc-g{padding:4px 0}
+.gdoc-g+.gdoc-g{border-top:1px solid #eef1f5;margin-top:6px;padding-top:8px}
+.gdoc-t{display:block;padding:2px 14px 6px;color:#93a1b0;font-size:.72rem;font-weight:700;
+ text-transform:uppercase;letter-spacing:.04em}
+.gdoc-p a{display:block;padding:6px 14px;color:#1b354d;text-decoration:none;font-size:.85rem;
+ border-radius:7px;border-bottom:none}
+.gdoc-p a:hover{background:#f2f5f9}
 </style>
 <div class="gnav"><span class="brand"><img src="${ADMIN_ABS}/p/arx-logo.png" alt="Arx"> Arx Tracker</span>${links}
+${docsMenu()}
 <a class="cta" href="https://arx-consulting.com" target="_blank" rel="noopener">Arx Consulting</a></div>
 <p class="gnav-sub">${esc(detail)}</p>`;
 }
