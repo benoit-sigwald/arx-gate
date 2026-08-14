@@ -472,6 +472,9 @@ const SECURITY = {
   coolify:           { label: 'Compte Coolify',    kind: 'key',     detail: 'Tableau de bord Coolify, mot de passe ou Google OAuth' },
   'db-prisme':       { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST schema prisme, cle de service' },
   'db-cv':           { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST schema cv, cle de service' },
+  'mail-review':     { label: 'Google OAuth',      kind: 'key',     detail: 'Revue de la quarantaine email, liste d adresses autorisees' },
+  whatsapp:          { label: 'Google OAuth',      kind: 'key',     detail: 'Tri WhatsApp et assistant omni, liste d adresses autorisees' },
+  'mailbot-api':     { label: 'Jeton API',         kind: 'token',   detail: 'Tri spam en cascade, en-tete X-API-Token' },
 };
 const SEC_COLORS = {
   public:  ['#1d7a4f', '#e6f4ec', '#b7e0c8'],
@@ -1480,9 +1483,10 @@ const trackerPage = async (req, res) => {
     const FAMILIES = [
       ['Sites vitrine', ['arxcapital', 'training', 'axperience', 'nice', 'nissai', 'chef-jason', 'mcp-root']],
       ['Dossiers prives', ['50', '877', 'cactus']],
-      ['Applications', ['blackstone', 'candidatures', 'prospects', 'gate', 'tracker']],
+      ['Applications', ['blackstone', 'candidatures', 'prospects', 'gate', 'tracker',
+                        'mail-review', 'whatsapp']],
       ['Serveurs MCP', ['mcp-einstein', 'mcp-prisme', 'mcp-immo-rapido', 'omni']],
-      ['Donnees & infra', ['data-api', 'db-prisme', 'db-cv', 'minio', 'coolify']],
+      ['Donnees & infra', ['data-api', 'db-prisme', 'db-cv', 'minio', 'coolify', 'mailbot-api']],
     ];
     const known = new Set(FAMILIES.flatMap(f => f[1]));
     const others = Object.keys(SITES).filter(x => !known.has(x));
