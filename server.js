@@ -475,6 +475,8 @@ const SECURITY = {
   'mail-review':     { label: 'Google OAuth',      kind: 'key',     detail: 'Revue de la quarantaine email, liste d adresses autorisees' },
   whatsapp:          { label: 'Google OAuth',      kind: 'key',     detail: 'Tri WhatsApp et assistant omni, liste d adresses autorisees' },
   'mailbot-api':     { label: 'Jeton API',         kind: 'token',   detail: 'Tri spam en cascade, en-tete X-API-Token' },
+  n8n:               { label: 'Compte n8n',        kind: 'key',     detail: 'Automatisation des flux, compte proprietaire n8n' },
+  antonweb:          { label: 'Public',            kind: 'public',  detail: 'Site statique, ouvert a tous' },
 };
 const SEC_COLORS = {
   public:  ['#1d7a4f', '#e6f4ec', '#b7e0c8'],
@@ -1481,12 +1483,13 @@ const trackerPage = async (req, res) => {
     const li = (arr, k) => arr.map(r => `<li><span>${esc(r[k] || '-')}</span><b>${r.C}</b></li>`).join('');
     // onglets groupes par famille, sur plusieurs lignes
     const FAMILIES = [
-      ['Sites vitrine', ['arxcapital', 'training', 'axperience', 'nice', 'nissai', 'chef-jason', 'mcp-root']],
+      ['Sites vitrine', ['arxcapital', 'training', 'axperience', 'nice', 'nissai', 'chef-jason',
+                         'antonweb', 'mcp-root']],
       ['Dossiers prives', ['50', '877', 'cactus']],
       ['Applications', ['blackstone', 'candidatures', 'prospects', 'gate', 'tracker',
                         'mail-review', 'whatsapp']],
       ['Serveurs MCP', ['mcp-einstein', 'mcp-prisme', 'mcp-immo-rapido', 'omni']],
-      ['Donnees & infra', ['data-api', 'db-prisme', 'db-cv', 'minio', 'coolify', 'mailbot-api']],
+      ['Donnees & infra', ['data-api', 'db-prisme', 'db-cv', 'minio', 'coolify', 'mailbot-api', 'n8n']],
     ];
     const known = new Set(FAMILIES.flatMap(f => f[1]));
     const others = Object.keys(SITES).filter(x => !known.has(x));
