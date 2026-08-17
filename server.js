@@ -231,8 +231,11 @@ const BO_MOBILE = `
   /* max-width:none : la page tracker tronque ses cellules a 220 px, ce qui n a
      plus de sens une fois la ligne depliee en carte. */
   td{display:flex;gap:10px;border-top:1px solid #eef1f5;padding:7px 0;
-     align-items:baseline;max-width:none;overflow:visible}
-  td>*{min-width:0}
+     align-items:baseline;max-width:none;overflow:visible;
+     /* URLs de referrer et adresses IP n ont aucun point de coupure : sans
+        cela elles imposent leur longueur a toute la table. */
+     overflow-wrap:anywhere;word-break:break-word}
+  td>*{min-width:0;overflow-wrap:anywhere}
   tr td:first-child{border-top:none}
   td:empty{display:none}
   td::before{content:attr(data-l);flex:0 0 34%;color:#93a1b0;font-size:.7rem;font-weight:700;
