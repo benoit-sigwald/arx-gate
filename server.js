@@ -246,8 +246,14 @@ const BO_MOBILE = `
   .step b{min-width:0;font-size:1.3rem;text-align:left}
   .step .cv{min-width:0}
 
-  /* Colonnes et fiches : une seule colonne. */
+  /* Colonnes et fiches : une seule colonne.
+     min-width:0 sur les enfants : un element de grille ou de flex vaut par
+     defaut la largeur de son contenu, et les libelles en white-space:nowrap
+     des cartes elargissaient la colonne au-dela de l ecran. */
   .cols,.kv,.prev{grid-template-columns:1fr}
+  .cols>*,.kv>*,.prev>*{min-width:0}
+  .card li>*{min-width:0}
+  .card li span{flex:1 1 auto}
   .card{padding:14px}
   iframe{height:260px}
 
