@@ -239,13 +239,6 @@ const BO_MOBILE = `
     text-transform:uppercase;letter-spacing:.04em;padding-top:2px}
   td:not([data-l])::before{content:none}
 
-  /* Cibles tactiles : 44 px de haut minimum sur tout ce qui se touche. */
-  .gnav{gap:10px;padding:10px 12px}
-  .gnav .brand{flex:1 1 100%;margin-right:0}
-  .gnav-l,.gdoc summary{padding:11px 4px}
-  .gdoc-p{left:0;right:0;min-width:0}
-  .gnav .cta{padding:11px 16px}
-
   /* Etapes du tunnel : la barre de progression passe sous le libelle. */
   .step{flex-wrap:wrap;gap:6px 12px;padding:14px}
   .step .lbl{min-width:0;flex:1 1 100%}
@@ -360,6 +353,18 @@ function navBar(current, { site = '', key = '' } = {}) {
 .gdoc-p a{display:block;padding:6px 14px;color:#1b354d;text-decoration:none;font-size:.85rem;
  border-radius:7px;border-bottom:none}
 .gdoc-p a:hover{background:#f2f5f9}
+/* Telephone : ces regles vivent ici et pas dans BO_MOBILE, parce que la barre
+   ecrit son <style> dans le corps de page, donc apres celui de l en-tete —
+   place ailleurs, le min-width du panneau reprendrait la main et deborderait. */
+@media(max-width:720px){
+ .gnav{gap:8px 12px;padding:10px 12px}
+ .gnav .brand{flex:1 1 100%;margin-right:0;font-size:1rem}
+ .gnav-l,.gdoc summary{padding:11px 2px;font-size:.92rem}
+ .gnav .cta{padding:11px 16px;margin-left:auto}
+ .gdoc{position:static}
+ .gdoc-p{position:static;min-width:0;width:100%;margin-top:8px;box-shadow:none;max-height:none}
+ .gdoc-p a{padding:11px 14px}
+}
 </style>
 <div class="gnav"><span class="brand"><img src="${ADMIN_ABS}/p/arx-logo.png" alt="Arx"> Arx Tracker</span>${links}
 ${docsMenu()}
