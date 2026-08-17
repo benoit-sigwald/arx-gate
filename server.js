@@ -184,11 +184,94 @@ function openLink(site, style = '') {
   return `<a href="${siteUrl(site)}" target="_blank" rel="noopener" title="ouvrir ${site} : ${siteUrl(site)}"
     style="text-decoration:none;font-size:.9em;${style}">&#8599;</a>`;
 }
+/* ---------- feuille commune du back-office ----------
+ * Les cinq pages partageaient le meme bloc de style recopie a chaque fois, ce qui
+ * rendait impossible de les rendre lisibles au telephone d un seul geste. Tout ce
+ * qui est commun vit ici ; chaque page n ajoute que ses specificites.
+ *
+ * Au telephone, un tableau de sept colonnes ne se lit pas : sous 720 px chaque
+ * ligne devient une carte, et l en-tete de colonne est repris devant la valeur
+ * grace a l attribut data-l pose sur chaque <td>.
+ */
+const BO_CSS = `
+*{box-sizing:border-box}
+body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;
+ padding:28px 20px;margin:0;-webkit-text-size-adjust:100%}
+.w{max-width:1200px;margin:0 auto}
+h1{font-size:1.4rem;margin:0 0 4px;color:#1b354d}
+.m{color:#5b6472;font-size:.85rem}
+a{color:#ae8d57}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0}
+.tile{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:16px}
+.tile b{display:block;font-size:1.6rem;color:#1b354d}
+.tile span{color:#5b6472;font-size:.8rem}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e4e8ef;
+ border-radius:12px;overflow:hidden;font-size:.85rem}
+th{text-align:left;padding:10px 12px;background:#f2f5f9;color:#1b354d;font-size:.72rem;
+ text-transform:uppercase;letter-spacing:.08em}
+td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
+`;
+
+/* La partie telephone est posee *apres* les regles propres a chaque page, sinon
+ * celles-ci (meme specificite, declarees plus bas) reprendraient la main sur la
+ * mise en cartes. */
+const BO_MOBILE = `
+@media(max-width:720px){
+  body{padding:14px 12px}
+  h1{font-size:1.2rem}
+  .tiles{grid-template-columns:repeat(2,1fr);gap:10px;margin:14px 0}
+  .tile{padding:12px}
+  .tile b{font-size:1.35rem}
+
+  /* Tableau -> liste de cartes : plus de defilement lateral. */
+  table{border:none;background:none;border-radius:0}
+  thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  tr{display:block;background:#fff;border:1px solid #e4e8ef;border-radius:12px;
+     padding:4px 12px 8px;margin-bottom:10px}
+  /* max-width:none : la page tracker tronque ses cellules a 220 px, ce qui n a
+     plus de sens une fois la ligne depliee en carte. */
+  td{display:flex;gap:10px;border-top:1px solid #eef1f5;padding:7px 0;
+     align-items:baseline;max-width:none;overflow:visible}
+  td>*{min-width:0}
+  tr td:first-child{border-top:none}
+  td:empty{display:none}
+  td::before{content:attr(data-l);flex:0 0 34%;color:#93a1b0;font-size:.7rem;font-weight:700;
+    text-transform:uppercase;letter-spacing:.04em;padding-top:2px}
+  td:not([data-l])::before{content:none}
+
+  /* Cibles tactiles : 44 px de haut minimum sur tout ce qui se touche. */
+  .gnav{gap:10px;padding:10px 12px}
+  .gnav .brand{flex:1 1 100%;margin-right:0}
+  .gnav-l,.gdoc summary{padding:11px 4px}
+  .gdoc-p{left:0;right:0;min-width:0}
+  .gnav .cta{padding:11px 16px}
+
+  /* Etapes du tunnel : la barre de progression passe sous le libelle. */
+  .step{flex-wrap:wrap;gap:6px 12px;padding:14px}
+  .step .lbl{min-width:0;flex:1 1 100%}
+  .step .bar{flex:1 1 100%;max-width:none;order:3}
+  .step b{min-width:0;font-size:1.3rem;text-align:left}
+  .step .cv{min-width:0}
+
+  /* Colonnes et fiches : une seule colonne. */
+  .cols,.kv,.prev{grid-template-columns:1fr}
+  .card{padding:14px}
+  iframe{height:260px}
+
+  /* 16 px sur les champs : en dessous, iOS zoome a chaque mise au point. */
+  input,select,textarea{font-size:16px}
+  button,.actions button{min-height:44px}
+  .actions{gap:8px}
+  .actions button{flex:1 1 auto}
+}
+`;
+
 // ---------- barre de menu du back-office ----------
 // Une seule definition des sections : titre, chemin et ce que la page montre.
 const MENU = [
   ['tracker', 'Tracker',   'Visites, pages vues, provenance et carte'],
   ['admin',   'Prospects', 'Fiches, parcours et statut de chaque inscrit'],
+  ['recherche', 'Recherche', 'Retrouver un email ou un nom dans tous les sites a la fois'],
   ['funnel',  'Tunnel',    'Visiteurs uniques, clics CTA, inscrits, approuves'],
   ['threats', 'Menaces',   'IP suspectes, scans de vulnerabilites, robots'],
   ['share',   'Partages',  'Titre, description et image des liens partages'],
@@ -1000,19 +1083,19 @@ router.get('/admin', async (req, res) => {
         <a href="${ADMIN_ABS}/admin?site=${x}" style="text-decoration:none;color:${x === site ? '#fff' : '#1b354d'}">${esc(x)}</a>
         ${openLink(x, `color:${x === site ? '#fff' : '#ae8d57'}`)}</span>`).join('');
     const rows = pros.rows.map(p => `<tr onclick="location.href='${ADMIN_ABS}/prospect?site=${site}&id=${p.ID}'" style="cursor:pointer">
-      <td>${fmt(p.CREATED_AT)}</td>
-      <td><b>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)}</b><br><span class="m">${esc(p.COMPANY || '')}</span></td>
-      <td>${esc(p.EMAIL)}<br><span class="m">${esc(p.PHONE || '')}</span></td>
-      <td>${esc(p.INTEREST || '')}</td>
-      <td>${esc(p.CITY || '')} ${esc(p.COUNTRY || '')}<br><span class="m">${esc(p.ORG || p.ISP || '')}</span></td>
-      <td><span style="color:${badge(p.STATUS)};font-weight:600">${esc(p.STATUS)}</span></td>
-      <td><b>${p.NB || 0}</b> visite(s)<br><span class="m">${p.NB ? 'derniere ' + fmt(p.LAST_SEEN) : '-'}</span></td>
-      <td class="m">${esc(p.LAST_PAGE || '-')}<br><span class="m">${esc(p.BROWSER || '')} ${esc(p.DEVICE || '')}</span></td>
-      <td>${p.LAT != null ? `<a href="${ADMIN_ABS}/prospect?site=${site}&id=${p.ID}#map" title="${esc(p.LAT + ', ' + p.LON)}">carte</a>` : '-'}</td></tr>`).join('');
+      <td data-l="Inscrit">${fmt(p.CREATED_AT)}</td>
+      <td data-l="Personne"><b>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)}</b><br><span class="m">${esc(p.COMPANY || '')}</span></td>
+      <td data-l="Contact">${esc(p.EMAIL)}<br><span class="m">${esc(p.PHONE || '')}</span></td>
+      <td data-l="Objet">${esc(p.INTEREST || '')}</td>
+      <td data-l="Lieu">${esc(p.CITY || '')} ${esc(p.COUNTRY || '')}<br><span class="m">${esc(p.ORG || p.ISP || '')}</span></td>
+      <td data-l="Statut"><span style="color:${badge(p.STATUS)};font-weight:600">${esc(p.STATUS)}</span></td>
+      <td data-l="Visites"><b>${p.NB || 0}</b> visite(s)<br><span class="m">${p.NB ? 'derniere ' + fmt(p.LAST_SEEN) : '-'}</span></td>
+      <td data-l="Derniere page" class="m">${esc(p.LAST_PAGE || '-')}<br><span class="m">${esc(p.BROWSER || '')} ${esc(p.DEVICE || '')}</span></td>
+      <td data-l="Geo">${p.LAT != null ? `<a href="${ADMIN_ABS}/prospect?site=${site}&id=${p.ID}#map" title="${esc(p.LAT + ', ' + p.LON)}">carte</a>` : '-'}</td></tr>`).join('');
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Prospects — ${esc(site)}</title><style>
-body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
+${BO_CSS}
 .w{max-width:1200px;margin:0 auto}h1{font-size:1.4rem;margin:0 0 4px;color:#1b354d}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0}
 .tile{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:16px}
@@ -1021,6 +1104,7 @@ table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e4e8
 th{text-align:left;padding:10px 12px;background:#f2f5f9;color:#1b354d;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}
 td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
 .m{color:#5b6472;font-size:.78rem}a{color:#ae8d57}
+${BO_MOBILE}
 </style></head><body><div class="w">
 ${navBar('admin', { site, key: req.query.key })}
 <h1>Prospects</h1><p class="m"><a href="${ADMIN_ABS}/prospect/new?site=${site}"><b>+ Ajouter un prospect</b></a> &middot; schéma Oracle dédié par site &middot; <a href="${ADMIN_ABS}/export.csv?site=${site}&key=${encodeURIComponent(req.query.key || ADMIN_KEY)}">export CSV</a></p>
@@ -1117,7 +1201,7 @@ router.get('/prospect/new', (req, res) => {
   res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Nouveau prospect</title><style>
-body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
+${BO_CSS}
 .w{max-width:640px;margin:0 auto}h1{font-size:1.3rem;color:#1b354d;margin:0 0 14px}
 .card{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:22px}
 label{display:block;font-size:.78rem;font-weight:600;color:#1b354d;margin:12px 0 4px}
@@ -1125,6 +1209,7 @@ input,select{width:100%;padding:10px 12px;border:1px solid #e4e8ef;border-radius
 input:focus,select:focus{outline:none;border-color:#ae8d57}
 button{margin-top:18px;padding:11px 20px;border:none;border-radius:9px;background:#1b354d;color:#fff;font:inherit;font-weight:600;cursor:pointer}
 a{color:#ae8d57}
+${BO_MOBILE}
 </style></head><body><div class="w">
 <p><a href="${ADMIN_ABS}/admin?site=${site}">&larr; retour aux prospects</a></p>
 <h1>Ajouter un prospect (${esc(site)})</h1>
@@ -1226,7 +1311,7 @@ router.get('/threats', async (req, res) => {
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Carte des menaces</title><style>
-body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
+${BO_CSS}
 .w{max-width:1150px;margin:0 auto}h1{font-size:1.4rem;color:#1b354d;margin:0 0 4px}
 h2{font-size:.95rem;color:#1b354d;margin:0 0 12px}
 .m{color:#5b6472;font-size:.85rem}a{color:#ae8d57;text-decoration:none}
@@ -1241,6 +1326,7 @@ td{padding:9px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
 .lvl{font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:6px;border:1px solid;white-space:nowrap}
 a.pin{text-decoration:none;font-size:1rem}
 code{background:#f2f5f9;padding:1px 5px;border-radius:4px;font-size:.78rem}
+${BO_MOBILE}
 </style></head><body><div class="w">
 ${navBar('threats', { key: req.query.key })}
 <h1>Carte des menaces</h1>
@@ -1266,13 +1352,13 @@ ${navBar('threats', { key: req.query.key })}
   const [fg, bg, bd] = COL[i.level] || COL.faible;
   return `<tr>
   <td>${i.lat != null ? `<a href="#" class="pin" data-ll="${i.lat},${i.lon}" data-label="${esc((i.city || '') + ' ' + (i.country || '') + ' - ' + i.ip)}">&#128205;</a>` : ''}</td>
-  <td><span class="lvl" style="color:${fg};background:${bg};border-color:${bd}">${i.level}</span></td>
-  <td>${esc(i.city || '?')}${i.city ? ', ' : ''}${esc(i.country || '?')}</td>
-  <td class="m">${esc(i.org || '-')}</td>
-  <td>${esc(i.reasons.join(' · '))}${i.samples.length ? `<br><code>${esc(i.samples.join(' '))}</code>` : ''}</td>
-  <td>${i.n}<br><span class="m">${esc(i.sites.join(', '))}</span></td>
-  <td class="m">${fmt(i.last)}</td>
-  <td class="m">${esc(i.ip)}</td></tr>`;
+  <td data-l="Niveau"><span class="lvl" style="color:${fg};background:${bg};border-color:${bd}">${i.level}</span></td>
+  <td data-l="Origine">${esc(i.city || '?')}${i.city ? ', ' : ''}${esc(i.country || '?')}</td>
+  <td data-l="Organisation" class="m">${esc(i.org || '-')}</td>
+  <td data-l="Signaux">${esc(i.reasons.join(' · '))}${i.samples.length ? `<br><code>${esc(i.samples.join(' '))}</code>` : ''}</td>
+  <td data-l="Requetes">${i.n}<br><span class="m">${esc(i.sites.join(', '))}</span></td>
+  <td data-l="Derniere" class="m">${fmt(i.last)}</td>
+  <td data-l="IP" class="m">${esc(i.ip)}</td></tr>`;
 }).join('') || '<tr><td colspan="8">Aucun signal suspect sur la periode : bonne nouvelle.</td></tr>'}</tbody></table>
 
 <p class="m" style="margin-top:16px">Lecture : le score combine les chemins d'attaque connus, les requetes refusees,
@@ -1324,7 +1410,7 @@ router.get('/funnel', async (req, res) => {
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Tunnel de conversion</title><style>
-body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
+${BO_CSS}
 .w{max-width:900px;margin:0 auto}h1{font-size:1.4rem;color:#1b354d;margin:0 0 4px}
 .m{color:#5b6472;font-size:.85rem}a{color:#ae8d57;text-decoration:none}
 .step{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:16px 20px;margin-bottom:10px;
@@ -1337,6 +1423,7 @@ table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e4e8
 th{text-align:left;padding:9px 12px;background:#f2f5f9;color:#1b354d;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}
 td{padding:9px 12px;border-top:1px solid #e4e8ef}
 .days a{margin-right:10px}
+${BO_MOBILE}
 </style></head><body><div class="w">
 ${navBar('funnel', { key: req.query.key })}
 <h1>Tunnel de conversion</h1>
@@ -1354,13 +1441,99 @@ ${steps.map(([lbl, n, cv]) => `<div class="step">
 </div>`).join('')}
 
 <table><thead><tr><th>Site</th><th>Visiteurs uniques</th><th>Visites</th><th>Clics CTA</th><th>Inscrits</th><th>Approuvés</th></tr></thead>
-<tbody>${rows.map(r => `<tr><td><b>${esc(r.site)}</b> ${openLink(r.site)}${r.err ? ' <span class="m">(lecture impossible)</span>' : ''}</td><td>${r.uniq}</td><td>${r.vis}</td><td>${r.cta}</td><td>${r.pro}</td><td>${r.appr}</td></tr>`).join('')}</tbody></table>
+<tbody>${rows.map(r => `<tr><td data-l="Site"><b>${esc(r.site)}</b> ${openLink(r.site)}${r.err ? ' <span class="m">(lecture impossible)</span>' : ''}</td><td data-l="Visiteurs uniques">${r.uniq}</td><td data-l="Visites">${r.vis}</td><td data-l="Clics CTA">${r.cta}</td><td data-l="Inscrits">${r.pro}</td><td data-l="Approuves">${r.appr}</td></tr>`).join('')}</tbody></table>
 
 <p class="m" style="margin-top:18px">Les clics sur le bouton de réservation sont comptés via le tracker
 (page <code>/cta:calendly</code>). Les rendez-vous réellement tenus et les contrats signés ne sont pas
 mesurables automatiquement — à saisir dans les notes du prospect.</p>
 </div></body></html>`);
   } catch (e) { console.error('funnel:', e); res.status(500).send('erreur: ' + esc(e.message)); }
+});
+
+/**
+ * Recherche d un prospect par email (ou nom, societe, telephone) a travers tous les sites.
+ *
+ * Un prospect est stocke dans le schema du site ou il s est inscrit : sans cette page il
+ * faut ouvrir les 29 onglets un par un pour retrouver une adresse. On balaie donc les
+ * schemas en sequence — jamais en parallele, l ADB « Always Free » plafonne a 21 sessions.
+ */
+router.get('/recherche', async (req, res) => {
+  if (!authed(req, res)) return;
+  const query = String(req.query.q || '').trim().slice(0, 160);
+  const key = req.query.key || '';
+  try {
+    const found = [];
+    let scanned = 0, failed = [];
+    if (query) {
+      const like = '%' + query.toLowerCase() + '%';
+      await withEachSite(async (site) => {
+        try {
+          const r = await q(site, `SELECT id, created_at, first_name, last_name, email, phone,
+                     company, interest, status, city, country
+                   FROM prospects
+                   WHERE LOWER(email) LIKE :p OR LOWER(last_name) LIKE :p
+                      OR LOWER(first_name) LIKE :p OR LOWER(company) LIKE :p
+                      OR LOWER(phone) LIKE :p
+                   ORDER BY created_at DESC FETCH FIRST 50 ROWS ONLY`, { p: like });
+          scanned++;
+          r.rows.forEach(p => found.push({ site, p }));
+        } catch (e) {
+          console.error(`recherche[${site}]:`, e.message.split('\n')[0]);
+          failed.push(site);
+        }
+      });
+      found.sort((a, b) => new Date(b.p.CREATED_AT) - new Date(a.p.CREATED_AT));
+    }
+
+    const fmt = t => t ? new Date(t).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+    const badge = st => ({ approved: '#1d7a4f', email_verified: '#ae8d57', pending: '#8a8f98', rejected: '#a32d2d' }[st] || '#8a8f98');
+    const kq = key ? `&key=${encodeURIComponent(key)}` : '';
+
+    const rows = found.map(({ site, p }) => `<tr onclick="location.href='${ADMIN_ABS}/prospect?site=${encodeURIComponent(site)}&id=${p.ID}${kq}'" style="cursor:pointer">
+      <td data-l="Site"><b>${esc(site)}</b> ${secDot(site)}</td>
+      <td data-l="Personne"><b>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)}</b><br><span class="m">${esc(p.COMPANY || '')}</span></td>
+      <td data-l="Contact">${esc(p.EMAIL)}<br><span class="m">${esc(p.PHONE || '')}</span></td>
+      <td data-l="Objet">${esc(p.INTEREST || '')}</td>
+      <td data-l="Lieu">${esc(p.CITY || '')} ${esc(p.COUNTRY || '')}</td>
+      <td data-l="Statut"><span style="color:${badge(p.STATUS)};font-weight:600">${esc(p.STATUS)}</span></td>
+      <td data-l="Inscrit">${fmt(p.CREATED_AT)}</td></tr>`).join('');
+
+    const result = !query
+      ? `<p class="m">Tapez une adresse email, un nom, une societe ou un telephone.
+           La recherche porte sur les ${Object.keys(SITES).length} sites a la fois.</p>`
+      : found.length === 0
+        ? `<p class="m">Aucun prospect ne correspond a « ${esc(query)} » sur les ${scanned} sites lus.</p>`
+        : `<p class="m"><b>${found.length}</b> resultat${found.length > 1 ? 's' : ''} sur
+             ${new Set(found.map(f => f.site)).size} site${new Set(found.map(f => f.site)).size > 1 ? 's' : ''},
+             ${scanned} schemas lus.</p>
+           <table><thead><tr><th>Site</th><th>Personne</th><th>Contact</th><th>Objet</th>
+             <th>Lieu</th><th>Statut</th><th>Inscrit</th></tr></thead><tbody>${rows}</tbody></table>`;
+
+    res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Recherche prospect</title><style>
+${BO_CSS}
+.srch{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 10px}
+.srch input{flex:1 1 320px;min-width:0;font:inherit;font-size:1rem;padding:11px 16px;
+ border:1px solid #e4e8ef;border-radius:10px;background:#fff;color:#14202e;-webkit-appearance:none}
+.srch input:focus{outline:none;border-color:#1b354d;box-shadow:0 0 0 3px rgba(27,53,77,.12)}
+.srch button{flex:0 0 auto;background:#1b354d;color:#fff;border:none;border-radius:10px;
+ padding:11px 22px;font:inherit;font-weight:600;cursor:pointer}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle}
+${BO_MOBILE}
+</style></head><body><div class="w">
+${navBar('recherche', { key })}
+<h1>Recherche</h1>
+<form class="srch" method="get" action="${ADMIN_ABS}/recherche" role="search">
+  ${key ? `<input type="hidden" name="key" value="${esc(key)}">` : ''}
+  <input type="search" name="q" value="${esc(query)}" autocomplete="off" autofocus
+         placeholder="email, nom, societe ou telephone" aria-label="Rechercher un prospect">
+  <button type="submit">Chercher</button>
+</form>
+${failed.length ? `<p class="m">Sites illisibles : ${esc(failed.join(', '))}.</p>` : ''}
+${result}
+</div></body></html>`);
+  } catch (e) { console.error('recherche:', e); res.status(500).send('erreur: ' + esc(e.message)); }
 });
 
 router.get('/share', async (req, res) => {
@@ -1401,7 +1574,7 @@ router.get('/share', async (req, res) => {
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Liens partages</title><style>
-body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
+${BO_CSS}
 .w{max-width:900px;margin:0 auto}h1{font-size:1.4rem;color:#1b354d;margin:0 0 4px}
 .card{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:20px;margin-bottom:16px}
 .head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
@@ -1419,6 +1592,7 @@ button.alt{background:#fff;color:#1b354d;border:1px solid #e4e8ef}
 button.alt:hover{border-color:#a32d2d;color:#a32d2d}
 a{color:#ae8d57;text-decoration:none;font-size:.82rem}
 .m{color:#5b6472;font-size:.85rem}
+${BO_MOBILE}
 </style></head><body><div class="w">
 ${navBar('share', { key: req.query.key })}
 <h1>Liens partages</h1>
@@ -1500,19 +1674,19 @@ const trackerPage = async (req, res) => {
         list.filter(x => SITES[x]).map(tab).join('')}</div>`).join('');
     const rows = last.rows.map(v => `<tr>
       <td>${v.LAT != null ? `<a href="#map" class="pin" data-ll="${v.LAT},${v.LON}" data-label="${esc((v.CITY || '') + ' ' + (v.COUNTRY || '') + ' - ' + v.IP)}">&#128205;</a>` : ''}</td>
-      <td>${fmt(v.TS)}</td>
-      <td>${v.PROSPECT_ID ? `<a href="${ADMIN_ABS}/prospect?site=${site}&id=${v.PROSPECT_ID}"><b>${esc(v.FIRST_NAME || '')} ${esc(v.LAST_NAME || '')}</b><br><span class="m">${esc(v.COMPANY || '')}</span></a>` : '<span class="m">anonyme</span>'}</td>
-      <td>${esc(v.PAGE || '')}</td>
-      <td>${esc(v.CITY || '')}${v.CITY ? ', ' : ''}${esc(v.COUNTRY || '')}</td>
-      <td class="m">${esc(v.ORG || v.ISP || '')}</td>
-      <td class="m">${esc(v.BROWSER || '')} &middot; ${esc(v.OS || '')} &middot; ${esc(v.DEVICE || '')}</td>
-      <td>${secBadge(site, v.PAGE, v.REFERRER)}</td>
-      <td class="m">${esc(v.REFERRER || '-')}</td>
-      <td class="m">${esc(v.IP || '')}</td></tr>`).join('');
+      <td data-l="Quand">${fmt(v.TS)}</td>
+      <td data-l="Prospect">${v.PROSPECT_ID ? `<a href="${ADMIN_ABS}/prospect?site=${site}&id=${v.PROSPECT_ID}"><b>${esc(v.FIRST_NAME || '')} ${esc(v.LAST_NAME || '')}</b><br><span class="m">${esc(v.COMPANY || '')}</span></a>` : '<span class="m">anonyme</span>'}</td>
+      <td data-l="Page">${esc(v.PAGE || '')}</td>
+      <td data-l="Ville, pays">${esc(v.CITY || '')}${v.CITY ? ', ' : ''}${esc(v.COUNTRY || '')}</td>
+      <td data-l="Organisation / ISP" class="m">${esc(v.ORG || v.ISP || '')}</td>
+      <td data-l="Appareil" class="m">${esc(v.BROWSER || '')} &middot; ${esc(v.OS || '')} &middot; ${esc(v.DEVICE || '')}</td>
+      <td data-l="Securite">${secBadge(site, v.PAGE, v.REFERRER)}</td>
+      <td data-l="Referrer" class="m">${esc(v.REFERRER || '-')}</td>
+      <td data-l="IP" class="m">${esc(v.IP || '')}</td></tr>`).join('');
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Tracker - ${esc(site)}</title><style>
-body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
+${BO_CSS}
 .w{max-width:1250px;margin:0 auto}h1{font-size:1.4rem;margin:0 0 4px;color:#1b354d}
 h2{font-size:.95rem;margin-bottom:10px;color:#1b354d}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:18px 0}
@@ -1543,6 +1717,7 @@ td{padding:8px 10px;border-top:1px solid #e4e8ef;vertical-align:top;max-width:22
 .lvl{font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:6px;border:1px solid;white-space:nowrap}
 iframe{width:100%;height:320px;border:0;border-radius:10px}
 .nav a{margin-right:10px}
+${BO_MOBILE}
 </style></head><body><div class="w">
 ${navBar('tracker', { site, key: req.query.key })}
 <h1>Tracker</h1>
@@ -1601,7 +1776,7 @@ router.get('/prospect', async (req, res) => {
     res.type('html').send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)} - prospect</title><style>
-body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f8fb;color:#14202e;padding:28px 20px;margin:0}
+${BO_CSS}
 .w{max-width:1100px;margin:0 auto}h1{font-size:1.4rem;margin:0 0 4px;color:#1b354d}
 h2{font-size:1rem;color:#1b354d;margin:26px 0 10px}
 .card{background:#fff;border:1px solid #e4e8ef;border-radius:12px;padding:18px}
@@ -1621,6 +1796,7 @@ iframe{width:100%;height:280px;border:0;border-radius:10px}
 .actions button.alt{background:#fff;color:#1b354d;border:1px solid #e4e8ef}
 .actions button.alt:hover{border-color:#ae8d57;color:#ae8d57}
 .actions button.danger{background:#a32d2d}.actions button.danger:hover{background:#c23c3c}
+${BO_MOBILE}
 </style></head><body><div class="w">
 <p><a href="${ADMIN_ABS}/admin?site=${site}">&larr; retour aux prospects (${esc(site)})</a></p>
 <h1>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)}</h1>
@@ -1684,19 +1860,19 @@ ${ll ? `<h2 id="map">Localisation approximative</h2><div class="card"><iframe lo
 
 <h2>Pages les plus consultees</h2>
 <table><thead><tr><th>Page</th><th>Vues</th><th>Derniere</th></tr></thead><tbody>
-${agg.rows.map(a => `<tr><td>${esc(a.PAGE)}</td><td>${a.C}</td><td class="m">${fmt(a.LAST_TS)}</td></tr>`).join('') || '<tr><td colspan="3">Aucune visite tracee.</td></tr>'}
+${agg.rows.map(a => `<tr><td data-l="Page">${esc(a.PAGE)}</td><td data-l="Vues">${a.C}</td><td data-l="Derniere" class="m">${fmt(a.LAST_TS)}</td></tr>`).join('') || '<tr><td colspan="3">Aucune visite tracee.</td></tr>'}
 </tbody></table>
 
 <h2>Parcours detaille</h2>
 <table><thead><tr><th>Quand</th><th>Page</th><th>Venu de</th><th>Appareil</th><th>Ville</th><th>IP</th></tr></thead><tbody>
-${vis.rows.map(v => `<tr><td>${fmt(v.TS)}</td><td>${esc(v.PAGE)}</td><td class="m">${esc(v.REFERRER || '-')}</td>
-  <td class="m">${esc(v.BROWSER)} ${esc(v.OS)} ${esc(v.DEVICE)}</td><td class="m">${esc(v.CITY || '')}</td>
-  <td class="m">${esc(v.IP)}</td></tr>`).join('') || '<tr><td colspan="6">Aucune visite tracee.</td></tr>'}
+${vis.rows.map(v => `<tr><td data-l="Quand">${fmt(v.TS)}</td><td data-l="Page">${esc(v.PAGE)}</td><td data-l="Venu de" class="m">${esc(v.REFERRER || '-')}</td>
+  <td data-l="Appareil" class="m">${esc(v.BROWSER)} ${esc(v.OS)} ${esc(v.DEVICE)}</td><td data-l="Ville" class="m">${esc(v.CITY || '')}</td>
+  <td data-l="IP" class="m">${esc(v.IP)}</td></tr>`).join('') || '<tr><td colspan="6">Aucune visite tracee.</td></tr>'}
 </tbody></table>
 
 <h2>Journal d'acces</h2>
 <table><thead><tr><th>Quand</th><th>Evenement</th><th>Depuis</th></tr></thead><tbody>
-${acc.rows.map(a => `<tr><td>${fmt(a.TS)}</td><td>${esc(a.EVENT)}</td><td class="m">${esc(a.IP)}</td></tr>`).join('') || '<tr><td colspan="3">-</td></tr>'}
+${acc.rows.map(a => `<tr><td data-l="Quand">${fmt(a.TS)}</td><td data-l="Evenement">${esc(a.EVENT)}</td><td data-l="Depuis" class="m">${esc(a.IP)}</td></tr>`).join('') || '<tr><td colspan="3">-</td></tr>'}
 </tbody></table>
 </div></body></html>`);
   } catch (e) { console.error('prospect:', e); res.status(500).send('erreur: ' + esc(e.message)); }
