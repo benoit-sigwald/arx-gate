@@ -174,12 +174,80 @@ function siteFromForward(req) {
   const seg = uri.split('?')[0].split('/').filter(Boolean)[0];
   return seg && SITES[seg] ? seg : null;
 }
+// URL reelle des services qui ne vivent pas sur arx-sites.duckdns.org.
+// Sans cette table, siteUrl() renvoyait https://arx-sites.duckdns.org/<slug>/ pour
+// tous les MCP et toutes les bases : des liens morts dans le tableau de bord.
+// SITE_URLS (variable d env) reste prioritaire : rien de configure cote Coolify n est ecrase.
+const MCP_HOST = 'https://arx-mcp.duckdns.org';
+const SVC_URLS = {
+  'mcp-root':        MCP_HOST + '/',
+  'mcp-einstein':    MCP_HOST + '/einstein/mcp',
+  'mcp-prisme':      MCP_HOST + '/prisme/mcp',
+  'mcp-immo-rapido': MCP_HOST + '/immo-rapido/mcp',
+  'mcp-hilde':       MCP_HOST + '/hilde/mcp',
+  'mcp-saul':        MCP_HOST + '/saul/mcp',
+  omni:              MCP_HOST + '/omni/mcp',
+  'data-api':        MCP_HOST + '/rest/v1/',
+  'db-prisme':       MCP_HOST + '/db-prisme/rest/v1/',
+  'db-cv':           MCP_HOST + '/db-cv/rest/v1/',
+  'db-saul':         MCP_HOST + '/db-saul/rest/v1/',
+  'db-tcm':          MCP_HOST + '/db-tcm/rest/v1/',
+  'db-dossier':      MCP_HOST + '/db-dossier/rest/v1/',
+};
+// Ce que fait chaque service, en une phrase : contenu de la pastille « i » de chaque onglet.
+const DESC = {
+  arxcapital:        'Site vitrine Arx Consulting, en francais et en anglais.',
+  training:          'AI Training : offre de formation, sous-site de arxweb.',
+  axperience:        'AXperience : proposition de valeur, sous-site de arxweb.',
+  nice:              'Pacte Nice IA : plan metropolitain d efficience budgetaire et de securite urbaine.',
+  nissai:            'Nissa IA, sous-site de arxweb.',
+  'chef-jason':      'Assistant culinaire gastronomique : trois recettes par demande, LLM open-source gratuits.',
+  antonweb:          'Site statique personnel.',
+  'mcp-root':        'Page racine du domaine MCP : liste des serveurs exposes.',
+  gate:              'Formulaire de demande d acces : capture du prospect, verification email, validation ntfy.',
+  '50':              'Dossier prive 50 : porte a prospects, acces sur validation manuelle.',
+  '877':             'Dossier prive 877 Super Cannes : porte a prospects, acces sur validation manuelle.',
+  cactus:            'Dossier prive Cactus / Lindenhof : porte a prospects, acces sur validation manuelle.',
+  blackstone:        'Tableau de bord trading : strategies, backtests, journal des ordres.',
+  candidatures:      'Tableau de bord des candidatures : CV, lettres, scores ATS.',
+  prospects:         'Base des prospects captures par la porte, tous sites confondus.',
+  tracker:           'Ancien tableau de bord tracker, remplace par celui-ci.',
+  'mcp-einstein':    'Recherche multi-angles : web, lecture de pages, archivage des recherches.',
+  'mcp-prisme':      'Analyse psycho-symbolique multi-agent : profils nuances, jamais deterministes.',
+  'mcp-immo-rapido': 'Analyse immobiliere PACA : DVF, PLU, foncier, rapports de deal.',
+  'mcp-hilde':       'Sante holistique : dossier personnel indexe, referentiel MTC, interactions plante-medicament.',
+  'mcp-saul':        'Juridique et fiscal : Legifrance et BOFiP cote France, Fedlex cote Suisse.',
+  omni:              'Passerelle MCP unifiee : Behavioral Profiler v3, moteur Prisme, Meta-Skills.',
+  'data-api':        'PostgREST, schema einstein : archives de recherche interrogeables en SQL.',
+  'db-prisme':       'PostgREST, schema prisme : sujets, calculs, placements astro, rapports.',
+  'db-cv':           'PostgREST, schema cv : master CV, skills bank, historique, contraintes.',
+  'db-saul':         'PostgREST, schema saul : corpus juridique indexe.',
+  'db-tcm':          'PostgREST, schema tcm : medecine chinoise, plantes et symptomes.',
+  'db-dossier':      'PostgREST, schema dossier : pieces et documents de dossier.',
+  minio:             'Stockage S3 MinIO : bucket rapports, lecture publique.',
+  coolify:           'Tableau de bord Coolify : deploiement continu de toutes les applications.',
+  'mail-review':     'Quarantaine email : revue des messages requalifies, restauration ou corbeille.',
+  whatsapp:          'Pont WhatsApp : tri des messages, assistant omni, envoi.',
+  'mailbot-api':     'Tri du spam en cascade : modele local puis Mistral, jamais de suppression.',
+  n8n:               'Automatisation des flux entre services.',
+};
 function siteUrl(site) {
-  return SITE_URLS[site] || `https://arx-sites.duckdns.org/${site}/`;
+  return SITE_URLS[site] || SVC_URLS[site] || `https://arx-sites.duckdns.org/${site}/`;
 }
 // duckdns.org est un « public suffix » : impossible de partager un cookie entre sous-domaines.
 // Le lien d'accès pointe donc vers la porte servie sur l'hôte du site, qui y pose un cookie d'hôte.
 // petit lien « ouvrir l'element dans un nouvel onglet », affiche a cote de chaque site
+// pastille « i » : au survol, ce que fait le service, son niveau d acces et son URL
+function infoDot(site) {
+  const s = SECURITY[site];
+  const d = DESC[site] || (s && s.detail) || '';
+  if (!d && !s) return '';
+  // DESC fait autorite : ne repeter le detail de SECURITY que faute de description
+  const detail = !DESC[site] && s && s.detail ? ' (' + s.detail + ')' : '';
+  const tip = [d, s ? 'Acces : ' + s.label + detail : '', siteUrl(site)].filter(Boolean).join('\n');
+  return '<i class="info" tabindex="0" role="button" aria-label="' + esc(site) +
+         ' : description" data-tip="' + esc(tip) + '">i</i>';
+}
 function openLink(site, style = '') {
   return `<a href="${siteUrl(site)}" target="_blank" rel="noopener" title="ouvrir ${site} : ${siteUrl(site)}"
     style="text-decoration:none;font-size:.9em;${style}">&#8599;</a>`;
@@ -1538,6 +1606,20 @@ ${BO_CSS}
 .srch button{flex:0 0 auto;background:#1b354d;color:#fff;border:none;border-radius:10px;
  padding:11px 22px;font:inherit;font-weight:600;cursor:pointer}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle}
+.info{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;flex:none;
+ border:1px solid #c8d0dc;border-radius:50%;background:#fff;color:#5b6b80;cursor:help;position:relative;
+ font:600 10px/1 Inter,-apple-system,sans-serif;font-style:normal;vertical-align:middle}
+.info:hover,.info:focus{background:#1b354d;color:#fff;border-color:#1b354d;outline:none}
+.info::after{content:attr(data-tip);position:absolute;left:50%;top:calc(100% + 9px);transform:translateX(-50%);
+ width:max-content;max-width:min(300px,74vw);background:#14202e;color:#fff;padding:9px 11px;border-radius:8px;
+ font:400 12px/1.5 Inter,-apple-system,sans-serif;white-space:pre-line;text-align:left;
+ opacity:0;visibility:hidden;transition:opacity .12s ease;z-index:60;
+ box-shadow:0 8px 24px rgba(0,0,0,.28);pointer-events:none}
+.info::before{content:"";position:absolute;left:50%;top:calc(100% + 4px);transform:translateX(-50%);
+ border:5px solid transparent;border-bottom-color:#14202e;opacity:0;visibility:hidden;z-index:61;pointer-events:none}
+.info:hover::after,.info:focus::after,.info:hover::before,.info:focus::before{opacity:1;visibility:visible}
+@media(max-width:720px){.info::after{left:auto;right:0;transform:none;max-width:78vw}
+ .info::before{left:auto;right:4px;transform:none}}
 ${BO_MOBILE}
 </style></head><body><div class="w">
 ${navBar('recherche', { key })}
@@ -1686,7 +1768,7 @@ const trackerPage = async (req, res) => {
     const known = new Set(FAMILIES.flatMap(f => f[1]));
     const others = Object.keys(SITES).filter(x => !known.has(x));
     if (others.length) FAMILIES.push(['Autres', others]);
-    const tab = x => `<span class="tabwrap"><a href="${ADMIN_ABS}?site=${x}" class="tab${x === site ? ' on' : ''}">${esc(x)}${secDot(x)}</a>${openLink(x)}</span>`;
+    const tab = x => `<span class="tabwrap"><a href="${ADMIN_ABS}?site=${x}" class="tab${x === site ? ' on' : ''}">${esc(x)}${secDot(x)}</a>${infoDot(x)}${openLink(x)}</span>`;
     const tabs = FAMILIES.filter(([, list]) => list.some(x => SITES[x]))
       .map(([name, list]) => `<div class="tabrow"><span class="tabfam">${esc(name)}</span>${
         list.filter(x => SITES[x]).map(tab).join('')}</div>`).join('');
