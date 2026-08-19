@@ -278,6 +278,23 @@ table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e4e8
 th{text-align:left;padding:10px 12px;background:#f2f5f9;color:#1b354d;font-size:.72rem;
  text-transform:uppercase;letter-spacing:.08em}
 td{padding:10px 12px;border-top:1px solid #e4e8ef;vertical-align:top}
+/* pastille « i » : description du service au survol. Doit vivre ICI, dans la feuille
+ * commune — placee dans le <style> d une page precise, elle ne s applique qu a celle-la
+ * et les points i s affichent nus sur toutes les autres. */
+.info{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;flex:none;
+ border:1px solid #c8d0dc;border-radius:50%;background:#fff;color:#5b6b80;cursor:help;position:relative;
+ font:600 10px/1 Inter,-apple-system,sans-serif;font-style:normal;vertical-align:middle}
+.info:hover,.info:focus{background:#1b354d;color:#fff;border-color:#1b354d;outline:none}
+.info::after{content:attr(data-tip);position:absolute;left:50%;top:calc(100% + 9px);transform:translateX(-50%);
+ width:max-content;max-width:min(300px,74vw);background:#14202e;color:#fff;padding:9px 11px;border-radius:8px;
+ font:400 12px/1.5 Inter,-apple-system,sans-serif;white-space:pre-line;text-align:left;
+ opacity:0;visibility:hidden;transition:opacity .12s ease;z-index:60;
+ box-shadow:0 8px 24px rgba(0,0,0,.28);pointer-events:none}
+.info::before{content:"";position:absolute;left:50%;top:calc(100% + 4px);transform:translateX(-50%);
+ border:5px solid transparent;border-bottom-color:#14202e;opacity:0;visibility:hidden;z-index:61;pointer-events:none}
+.info:hover::after,.info:focus::after,.info:hover::before,.info:focus::before{opacity:1;visibility:visible}
+@media(max-width:720px){.info::after{left:auto;right:0;transform:none;max-width:78vw}
+ .info::before{left:auto;right:4px;transform:none}}
 `;
 
 /* La partie telephone est posee *apres* les regles propres a chaque page, sinon
@@ -1167,7 +1184,7 @@ router.get('/admin', async (req, res) => {
       `<span style="display:inline-flex;align-items:center;gap:5px;margin:0 6px 6px 0;padding:5px 10px;border:1px solid #e4e8ef;border-radius:8px;
         background:${x === site ? '#1b354d' : '#fff'};font-size:.85rem">
         <a href="${ADMIN_ABS}/admin?site=${x}" style="text-decoration:none;color:${x === site ? '#fff' : '#1b354d'}">${esc(x)}</a>
-        ${openLink(x, `color:${x === site ? '#fff' : '#ae8d57'}`)}</span>`).join('');
+        ${infoDot(x)}${openLink(x, `color:${x === site ? '#fff' : '#ae8d57'}`)}</span>`).join('');
     const rows = pros.rows.map(p => `<tr onclick="location.href='${ADMIN_ABS}/prospect?site=${site}&id=${p.ID}'" style="cursor:pointer">
       <td data-l="Inscrit">${fmt(p.CREATED_AT)}</td>
       <td data-l="Personne"><b>${esc(p.FIRST_NAME)} ${esc(p.LAST_NAME)}</b><br><span class="m">${esc(p.COMPANY || '')}</span></td>
@@ -1606,20 +1623,6 @@ ${BO_CSS}
 .srch button{flex:0 0 auto;background:#1b354d;color:#fff;border:none;border-radius:10px;
  padding:11px 22px;font:inherit;font-weight:600;cursor:pointer}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle}
-.info{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;flex:none;
- border:1px solid #c8d0dc;border-radius:50%;background:#fff;color:#5b6b80;cursor:help;position:relative;
- font:600 10px/1 Inter,-apple-system,sans-serif;font-style:normal;vertical-align:middle}
-.info:hover,.info:focus{background:#1b354d;color:#fff;border-color:#1b354d;outline:none}
-.info::after{content:attr(data-tip);position:absolute;left:50%;top:calc(100% + 9px);transform:translateX(-50%);
- width:max-content;max-width:min(300px,74vw);background:#14202e;color:#fff;padding:9px 11px;border-radius:8px;
- font:400 12px/1.5 Inter,-apple-system,sans-serif;white-space:pre-line;text-align:left;
- opacity:0;visibility:hidden;transition:opacity .12s ease;z-index:60;
- box-shadow:0 8px 24px rgba(0,0,0,.28);pointer-events:none}
-.info::before{content:"";position:absolute;left:50%;top:calc(100% + 4px);transform:translateX(-50%);
- border:5px solid transparent;border-bottom-color:#14202e;opacity:0;visibility:hidden;z-index:61;pointer-events:none}
-.info:hover::after,.info:focus::after,.info:hover::before,.info:focus::before{opacity:1;visibility:visible}
-@media(max-width:720px){.info::after{left:auto;right:0;transform:none;max-width:78vw}
- .info::before{left:auto;right:4px;transform:none}}
 ${BO_MOBILE}
 </style></head><body><div class="w">
 ${navBar('recherche', { key })}
