@@ -562,6 +562,8 @@ const SECURITY = {
   'mcp-einstein':    { label: 'Jeton Bearer',      kind: 'token',   detail: 'Authorization: Bearer, ou prefixe /t/<jeton>' },
   'mcp-prisme':      { label: 'Jeton Bearer',      kind: 'token',   detail: 'Authorization: Bearer, ou prefixe /t/<jeton>' },
   'mcp-immo-rapido': { label: 'Jeton Bearer',      kind: 'token',   detail: 'Authorization: Bearer + portail web protege' },
+  'mcp-hilde':       { label: 'Jeton Bearer',      kind: 'token',   detail: 'Sante holistique : dossier personnel + referentiel MTC' },
+  'mcp-saul':        { label: 'Jeton Bearer',      kind: 'token',   detail: 'Juridique FR/CH : Legifrance, BOFiP, Fedlex' },
   'data-api':        { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST schema einstein, cle de service' },
   omni:              { label: 'Jeton Bearer',      kind: 'token',   detail: 'Serveur MCP omni, Authorization: Bearer' },
   tracker:           { label: 'Cle admin',         kind: 'key',     detail: 'Ancien tableau de bord tracker, cle de session' },
@@ -569,6 +571,8 @@ const SECURITY = {
   coolify:           { label: 'Compte Coolify',    kind: 'key',     detail: 'Tableau de bord Coolify, mot de passe ou Google OAuth' },
   'db-prisme':       { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST schema prisme, cle de service' },
   'db-cv':           { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST schema cv, cle de service' },
+  'db-saul':         { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST schema saul, cle de service' },
+  'db-tcm':          { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST schema tcm (medecine chinoise), cle de service' },
   'mail-review':     { label: 'Google OAuth',      kind: 'key',     detail: 'Revue de la quarantaine email, liste d adresses autorisees' },
   whatsapp:          { label: 'Google OAuth',      kind: 'key',     detail: 'Tri WhatsApp et assistant omni, liste d adresses autorisees' },
   'mailbot-api':     { label: 'Jeton API',         kind: 'token',   detail: 'Tri spam en cascade, en-tete X-API-Token' },
@@ -1676,8 +1680,8 @@ const trackerPage = async (req, res) => {
       ['Dossiers prives', ['50', '877', 'cactus']],
       ['Applications', ['blackstone', 'candidatures', 'prospects', 'gate', 'tracker',
                         'mail-review', 'whatsapp']],
-      ['Serveurs MCP', ['mcp-einstein', 'mcp-prisme', 'mcp-immo-rapido', 'omni']],
-      ['Donnees & infra', ['data-api', 'db-prisme', 'db-cv', 'minio', 'coolify', 'mailbot-api', 'n8n']],
+      ['Serveurs MCP', ['mcp-einstein', 'mcp-prisme', 'mcp-immo-rapido', 'mcp-hilde', 'mcp-saul', 'omni']],
+      ['Donnees & infra', ['data-api', 'db-prisme', 'db-cv', 'db-saul', 'db-tcm', 'minio', 'coolify', 'mailbot-api', 'n8n']],
     ];
     const known = new Set(FAMILIES.flatMap(f => f[1]));
     const others = Object.keys(SITES).filter(x => !known.has(x));
