@@ -646,6 +646,7 @@ const SECURITY = {
   blackstone:        { label: 'Cle admin',         kind: 'key',     detail: 'Tableau de bord interne, cle de session' },
   candidatures:      { label: 'Cle admin',         kind: 'key',     detail: 'Tableau de bord interne, cle de session' },
   prospects:         { label: 'Cle admin',         kind: 'key',     detail: 'DASH_TOKEN' },
+  atlas:             { label: 'Charge chiffree',   kind: 'key',     detail: 'AES-GCM 256, cle dans le fragment d URL - jamais transmise au serveur' },
   'mcp-einstein':    { label: 'Jeton Bearer',      kind: 'token',   detail: 'Authorization: Bearer, ou prefixe /t/<jeton>' },
   'mcp-prisme':      { label: 'Jeton Bearer',      kind: 'token',   detail: 'Authorization: Bearer, ou prefixe /t/<jeton>' },
   'mcp-immo-rapido': { label: 'Jeton Bearer',      kind: 'token',   detail: 'Authorization: Bearer + portail web protege' },
@@ -1766,7 +1767,7 @@ const trackerPage = async (req, res) => {
                          'antonweb', 'mcp-root']],
       ['Dossiers prives', ['50', '877', 'cactus', '3point']],
       ['Applications', ['blackstone', 'candidatures', 'prospects', 'gate', 'tracker',
-                        'mail-review', 'whatsapp']],
+                        'mail-review', 'whatsapp', 'atlas']],
       ['Serveurs MCP', ['mcp-einstein', 'mcp-prisme', 'mcp-immo-rapido', 'mcp-hilde', 'mcp-saul', 'omni']],
       ['Donnees & infra', ['data-api', 'db-prisme', 'db-cv', 'db-saul', 'db-tcm', 'minio', 'coolify', 'mailbot-api', 'n8n']],
     ];
