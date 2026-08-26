@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Prospect gate — forwardauth, lead capture, email verification, ntfy approval, Oracle storage",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
+  "scripts": { "start": "node server.js", "test": "node --test test/*.test.js" },
   "engines": { "node": ">=20" },
   "dependencies": {
     "adm-zip": "^0.5.16",

@@ -2039,6 +2039,17 @@ if (ADMIN_ABS) {
   app.use(ADMIN_ABS, router);
 }
 
+// Le serveur ne demarre que lance directement. Charge par un test (require),
+// il expose seulement ses aides : sans ce garde, importer server.js ouvrirait
+// un port et tenterait de joindre Oracle.
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(
+if (require.main === module) app.listen(PORT, '0.0.0.0', () => console.log(
   `arx-gate :${PORT} base «${BASE || '/'}» · back-office «${ADMIN_ABS}» · sites: ${Object.keys(SITES).join(', ')} · email ${EMAIL_ON ? 'ON' : 'OFF'} · ntfy ${NTFY_URL ? 'ON' : 'OFF'}`));
+
+// Aides pures exposees pour les tests. Aucun effet quand server.js est lance
+// directement : le garde require.main ci-dessus empeche tout demarrage a
+// l'import, et ces fonctions n'ont pas d'effet de bord.
+module.exports = {
+  makeCookieValue, parseCookieValue, readCookie,
+  siteFromForward, clientIp, parseUa, absolute, cut,
+};
