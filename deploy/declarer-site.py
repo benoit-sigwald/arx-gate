@@ -108,6 +108,13 @@ def main():
         if len(porteurs) != 1 or tailles != [len(sites)]:
             sys.exit("REFUS de redeployer : l API ne rend pas ce qui vient d etre ecrit.")
 
+    # Un slug sans URL n est pas inoffensif : siteUrl() retombe alors sur
+    # arx-sites.duckdns.org/<slug>/, qui n existe pas. Le lien « ouvrir » du
+    # tracker mene a une 404, et on croit le site casse.
+    sans_url = sorted(s for s in sites if s not in urls)
+    if sans_url:
+        print(f"ATTENTION — slugs sans URL declaree : {sans_url}")
+
     print(f"\n{o.slug} declare. {len(sites)} sites.")
     if o.redeployer:
         print("redeploiement :",
