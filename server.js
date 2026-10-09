@@ -499,6 +499,8 @@ const form = express.urlencoded({ extended: false, limit: '16kb' });
 
 const PAGE = (title, body, og) => `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<link rel="icon" type="image/png" href="${PUBLIC_URL}/p/favicon.png">
+<link rel="shortcut icon" href="${PUBLIC_URL}/p/favicon.ico">
 <title>${esc(og ? og.title : title + ' — Arx Capital')}</title>
 ${og ? `<meta name="description" content="${esc(og.desc)}">
 <meta property="og:type" content="website">
@@ -2000,6 +2002,8 @@ router.get('/export.csv', async (req, res) => {
   res.type('text/csv').set('Content-Disposition', `attachment; filename="prospects-${site}.csv"`).send(csv);
 });
 
+router.get('/favicon.ico', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon.ico')));
+router.get('/favicon.png', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon.png')));
 router.use('/p', express.static(path.join(__dirname, 'public'), { maxAge: '7d' }));
 
 // image de partage : recuperee sur le site protege et servie publiquement
