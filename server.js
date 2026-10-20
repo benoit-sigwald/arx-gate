@@ -193,6 +193,7 @@ const SVC_URLS = {
   'db-saul':         MCP_HOST + '/db-saul/rest/v1/',
   'db-tcm':          MCP_HOST + '/db-tcm/rest/v1/',
   'db-dossier':      MCP_HOST + '/db-dossier/rest/v1/',
+  minio:             'https://minio.arx-apps.duckdns.org/',
 };
 // Ce que fait chaque service, en une phrase : contenu de la pastille « i » de chaque onglet.
 const DESC = {
@@ -226,7 +227,7 @@ const DESC = {
   'db-saul':         'PostgREST, schema saul : corpus juridique indexe.',
   'db-tcm':          'PostgREST, schema tcm : medecine chinoise, plantes et symptomes.',
   'db-dossier':      'PostgREST, schema dossier : pieces et documents de dossier.',
-  minio:             'Stockage S3 MinIO : bucket rapports, lecture publique.',
+  minio:             'Stockage S3 MinIO : console web et bucket rapports en lecture publique.',
   coolify:           'Tableau de bord Coolify : deploiement continu de toutes les applications.',
   'mail-review':     'Quarantaine email : revue des messages requalifies, restauration ou corbeille.',
   whatsapp:          'Pont WhatsApp : tri des messages, assistant omni, envoi.',
@@ -234,6 +235,7 @@ const DESC = {
   n8n:               'Automatisation des flux entre services.',
 };
 function siteUrl(site) {
+  if (site === 'minio') return SVC_URLS.minio;
   return SITE_URLS[site] || SVC_URLS[site] || `https://arx-sites.duckdns.org/${site}/`;
 }
 // duckdns.org est un « public suffix » : impossible de partager un cookie entre sous-domaines.
@@ -659,7 +661,7 @@ const SECURITY = {
   'data-api':        { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST schema einstein, cle de service' },
   omni:              { label: 'Jeton Bearer',      kind: 'token',   detail: 'Serveur MCP omni, Authorization: Bearer' },
   tracker:           { label: 'Cle admin',         kind: 'key',     detail: 'Ancien tableau de bord tracker, cle de session' },
-  minio:             { label: 'Cle S3',            kind: 'key',     detail: 'MinIO, bucket rapports en lecture publique' },
+  minio:             { label: 'Cle S3 & Console',  kind: 'key',     detail: 'MinIO Console web, bucket rapports en lecture publique' },
   coolify:           { label: 'Compte Coolify',    kind: 'key',     detail: 'Tableau de bord Coolify, mot de passe ou Google OAuth' },
   'db-prisme':       { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST schema prisme, cle de service' },
   'db-cv':           { label: 'Jeton API',         kind: 'token',   detail: 'PostgREST schema cv, cle de service' },
