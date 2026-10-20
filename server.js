@@ -194,6 +194,7 @@ const SVC_URLS = {
   'db-tcm':          MCP_HOST + '/db-tcm/rest/v1/',
   'db-dossier':      MCP_HOST + '/db-dossier/rest/v1/',
   minio:             'https://minio.arx-apps.duckdns.org/',
+  '3point-usecases': 'https://arx-consulting.com/3point/usecases/',
 };
 // Ce que fait chaque service, en une phrase : contenu de la pastille « i » de chaque onglet.
 const DESC = {
@@ -210,6 +211,7 @@ const DESC = {
   '877':             'Dossier prive 877 Super Cannes : porte a prospects, acces sur validation manuelle.',
   cactus:            'Dossier prive Cactus / Lindenhof : porte a prospects, acces sur validation manuelle.',
   '3point':          'Espace onboarding client 3Point.',
+  '3point-usecases': 'Base de cas d usage IA 3Point : recherche semantique, matrice 2x2, roadmap.',
   blackstone:        'Tableau de bord trading : strategies, backtests, journal des ordres.',
   candidatures:      'Tableau de bord des candidatures : CV, lettres, scores ATS.',
   prospects:         'Base des prospects captures par la porte, tous sites confondus.',
@@ -648,6 +650,7 @@ const SECURITY = {
   '877':             { label: 'Porte prospects',   kind: 'gate',    detail: 'forwardAuth + cookie signe 90 j, validation manuelle' },
   cactus:            { label: 'Porte prospects',   kind: 'gate',    detail: 'forwardAuth + cookie signe 90 j, validation manuelle' },
   '3point':          { label: 'Basic auth',        kind: 'key',     detail: 'HTTP Basic au niveau du proxy, realm 3Point - espace onboarding' },
+  '3point-usecases': { label: 'Basic auth',        kind: 'key',     detail: 'HTTP Basic realm 3point Use Cases' },
   blackstone:        { label: 'Cle admin',         kind: 'key',     detail: 'Tableau de bord interne, cle de session' },
   candidatures:      { label: 'Cle admin',         kind: 'key',     detail: 'Tableau de bord interne, cle de session' },
   prospects:         { label: 'Cle admin',         kind: 'key',     detail: 'DASH_TOKEN' },
@@ -1773,7 +1776,7 @@ const trackerPage = async (req, res) => {
                          'antonweb', 'mcp-root']],
       ['Dossiers prives', ['50', '877', 'cactus', '3point']],
       ['Applications', ['blackstone', 'candidatures', 'prospects', 'gate', 'tracker',
-                        'mail-review', 'whatsapp', 'atlas', 'capgrowth']],
+                        'mail-review', 'whatsapp', 'atlas', 'capgrowth', '3point-usecases']],
       ['Serveurs MCP', ['mcp-einstein', 'mcp-prisme', 'mcp-immo-rapido', 'mcp-hilde', 'mcp-saul', 'omni']],
       ['Donnees & infra', ['data-api', 'db-prisme', 'db-cv', 'db-saul', 'db-tcm', 'minio', 'coolify', 'mailbot-api', 'n8n']],
     ];
